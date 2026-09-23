@@ -24,7 +24,7 @@ func newTestManager(t *testing.T) (*Manager, string) {
 func TestExecuteLifecycle(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, err := m.Execute(context.Background(), "echo hi && sleep 0.2 && echo bye", "", nil)
+	id, err := m.Execute(context.Background(), "echo hi && sleep 0.2 && echo bye", "", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestExecuteLifecycle(t *testing.T) {
 func TestExecuteNoTrailingNewline(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "printf no-newline-here", "", nil)
+	id, _ := m.Execute(context.Background(), "printf no-newline-here", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 
@@ -81,7 +81,7 @@ func TestExecuteNoTrailingNewline(t *testing.T) {
 func TestStreamFilter(t *testing.T) {
 	m, _ := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "echo to-out && echo to-err >&2", "", nil)
+	id, _ := m.Execute(context.Background(), "echo to-out && echo to-err >&2", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 
@@ -108,7 +108,7 @@ func TestPersistenceAcrossReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	m1 := NewManager(shellh.New(ws, []string{"PATH=/usr/bin:/bin"}), store1, 1000, 200)
-	id, _ := m1.Execute(context.Background(), "echo persist-me", "", nil)
+	id, _ := m1.Execute(context.Background(), "echo persist-me", "", nil, 0)
 	job, _ := m1.Get(id)
 	<-job.Done()
 
@@ -162,7 +162,7 @@ func TestBootRecovery(t *testing.T) {
 func TestRetention(t *testing.T) {
 	m, dbPath := newTestManager(t)
 
-	id, _ := m.Execute(context.Background(), "echo old-job", "", nil)
+	id, _ := m.Execute(context.Background(), "echo old-job", "", nil, 0)
 	job, _ := m.Get(id)
 	<-job.Done()
 	time.Sleep(400 * time.Millisecond)
@@ -186,7 +186,7 @@ func TestKillAndStdin(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	// stdin round-trip
-	id, _ := m.Execute(context.Background(), "cat", "", nil)
+	id, _ := m.Execute(context.Background(), "cat", "", nil, 0)
 	job, _ := m.Get(id)
 	if err := job.Stdin([]byte("hello\n"), true); err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestKillAndStdin(t *testing.T) {
 	}
 
 	// kill a sleeping job
-	id2, _ := m.Execute(context.Background(), "sleep 60", "", nil)
+	id2, _ := m.Execute(context.Background(), "sleep 60", "", nil, 0)
 	job2, _ := m.Get(id2)
 	time.Sleep(100 * time.Millisecond)
 	job2.Kill()
@@ -213,5 +213,61 @@ func TestKillAndStdin(t *testing.T) {
 	}
 	if job2.State != StateKilled {
 		t.Errorf("state = %s want killed", job2.State)
+	}
+}
+
+func TestExecuteTimeoutKills(t *testing.T) {
+	m, _ := newTestManager(t)
+	// 200ms deadline on a 60s sleep: the worker must kill it.
+	id, err := m.Execute(context.Background(), "sleep 60", "", nil, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, _ := m.Get(id)
+	select {
+	case <-job.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout did not kill the job")
+	}
+	if job.State != StateKilled {
+		t.Errorf("state = %s want killed", job.State)
+	}
+}
+
+func TestOutputLinesSQLPagination(t *testing.T) {
+	m, _ := newTestManager(t)
+	// 250 lines: enough to exercise page offsets against the store.
+	id, _ := m.Execute(context.Background(), "for i in $(seq 1 250); do echo line-$i; done", "", nil, 0)
+	job, _ := m.Get(id)
+	select {
+	case <-job.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("job did not finish")
+	}
+	// wait for the writer to flush the persisted rows
+	time.Sleep(300 * time.Millisecond)
+
+	// A middle page by absolute offset.
+	lines, total, start, end, done, err := m.OutputLines(id, -1, 100, 110)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 250 || start != 100 || end != 110 || !done {
+		t.Fatalf("window meta: total=%d start=%d end=%d done=%v", total, start, end, done)
+	}
+	if len(lines) != 10 || lines[0] != "line-101" || lines[9] != "line-110" {
+		t.Fatalf("page = %v", lines)
+	}
+
+	// Negative start = tail.
+	lines, _, start, end, _, _ = m.OutputLines(id, -1, -3, 0)
+	if start != 247 || end != 250 || len(lines) != 3 || lines[2] != "line-250" {
+		t.Fatalf("tail page: start=%d end=%d lines=%v", start, end, lines)
+	}
+
+	// ReplayTail reads the persisted tail backwards.
+	tail := m.ReplayTail(id, 2)
+	if len(tail) != 2 || tail[1] != "line-250" {
+		t.Fatalf("replay tail = %v", tail)
 	}
 }
