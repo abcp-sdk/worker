@@ -1,29 +1,31 @@
-# easyworker on macOS 15 (Sequoia) with Xcode — a lightweight sandbox worker.
+# agent-worker on macOS 15 (Sequoia) — a non-privileged VM sandbox worker.
 #
-# Same contract as k8s/easyworker-macos.yaml, but a smaller footprint:
-#   * CPU_CORES=2, RAM_SIZE=8G (verified booting and serving on the same base)
-#   * image carries Xcode 26.3 Universal + the Command Line Tools (Swift 6.2.4,
-#     clang 17) so build agents can run `xcodebuild` / `swift build` directly.
+# Same shape as k8s/agent-worker-windows.yaml: a pre-baked macOS image whose guest
+# runs the agent-worker binary, with KVM delivered by the generic-device-plugin
+# (extended resource squat.ai/kvm) while the pod stays privileged: false.
 #
-# Increase CPU_CORES to a power of two (4/8/16) and RAM_SIZE for heavier builds;
-# the baked guest disk supports it without re-install.
+# Image variants on the same base (see readme):
+#   v1.3.0-basic    macOS 15 only (no developer toolchain)
+#   v1.3.0-xcode    + Xcode 26.3 / Swift 6.2.4
+#   v1.3.0-cmp      + Xcode + JDK 17 / Gradle / Kotlin / Compose Multiplatform
+#   v1.3.0-flutter  + Xcode + Flutter 3.47.4 (Swift Package Manager)
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: easyworker-macos-xcode
+  name: agent-worker-macos
   namespace: temp
   labels:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: easyworker-macos-xcode
+      app: agent-worker-macos
   template:
     metadata:
       labels:
-        app: easyworker-macos-xcode
+        app: agent-worker-macos
     spec:
       nodeSelector:
         kubernetes.io/hostname: <node-name>
@@ -32,7 +34,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: macos
-          image: <registry>/vm-images/easyworker-macos:v1.3.0-xcode
+          image: <registry>/vm-images/agent-worker-macos:v1.3.0-basic
           imagePullPolicy: IfNotPresent
 
           securityContext:
@@ -53,17 +55,18 @@ spec:
             # Non-empty => the guest worker starts pre-authorized (no claim).
             - { name: WORKER_TOKEN, value: "" }
             - { name: VERSION, value: "15" }
-            # Lightweight default; raise to 4/8/16 for heavier builds.
-            - { name: CPU_CORES, value: "2" }
-            - { name: RAM_SIZE, value: "8192M" }
+            # macOS wants a power-of-two vCPU count (2/4/8/16/...).
+            # 4 is the stable default for Sequoia on x86_64 KVM hosts.
+            - { name: CPU_CORES, value: "4" }
+            - { name: RAM_SIZE, value: "16384M" }
             - { name: DISK_SIZE, value: "128G" }    # >= baked disk size
             - { name: MANUAL, value: "N" }
 
           resources:
-            requests: { cpu: "2", memory: "8Gi" }
+            requests: { cpu: "4", memory: "16Gi" }
             limits:
-              cpu: "2"
-              memory: "12Gi"
+              cpu: "4"
+              memory: "20Gi"
               squat.ai/kvm: "1"        # <- the KVM device request
 
           volumeMounts:
@@ -75,13 +78,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-macos-xcode
+  name: agent-worker-macos
   namespace: temp
   labels:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
 spec:
   selector:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
   ports:
     - { name: http, port: 80, targetPort: 48080 }
     - { name: worker, port: 48080, targetPort: 48080 }
@@ -91,13 +94,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssh-easyworker-macos-xcode
+  name: ssh-agent-worker-macos
   namespace: temp
   labels:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
 spec:
   selector:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
   ports:
     - { name: ssh, port: 22, targetPort: 22 }
   type: ClusterIP
@@ -105,13 +108,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-macos-xcode-novnc
+  name: agent-worker-macos-novnc
   namespace: temp
   labels:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
 spec:
   selector:
-    app: easyworker-macos-xcode
+    app: agent-worker-macos
   ports:
     - { name: web, port: 80, targetPort: 8006 }
   type: ClusterIP

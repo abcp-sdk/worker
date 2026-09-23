@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# easyworker Android sandbox entrypoint.
+# agent-worker Android sandbox entrypoint.
 #
 #   Xvfb :99  ->  emulator Qt window (xcb)  ->  x11vnc :5900
 #     ->  websockify :6081 -> nginx :6080 (noVNC) -> browser
-#   adb -> emulator-5554 (used by easyworker jobs)
-#   easyworker :48080
+#   adb -> emulator-5554 (used by agent-worker jobs)
+#   agent-worker :48080
 #
 # The AVD is created on first start from the packaged system image; the guest's
 # userdata lives on /data so it survives a container restart.
@@ -108,8 +108,8 @@ adb -s emulator-5554 shell "wm dismiss-keyguard" >/dev/null 2>&1 || true
 
 export ANDROID_SERIAL="emulator-5554"
 
-echo "android: starting easyworker on :${WORKER_PORT:-48080}"
-easyworker &
+echo "android: starting agent-worker on :${WORKER_PORT:-48080}"
+agent-worker &
 WORKER_PID=$!
 
 wait "$WORKER_PID"

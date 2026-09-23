@@ -20,7 +20,7 @@ LANG="${1:?usage: test-preset.sh <lang> [tag] [extra trustprobe args]}"
 TAG="${2:-latest}"
 shift $(( $# > 1 ? 2 : 1 ))
 NS="${NS:-temp}"
-IMAGE="${IMAGE:-forgejo.develop.10.199.64.20.nip.io/easylab/easyworker-${LANG}:${TAG}}"
+IMAGE="${IMAGE:-forgejo.develop.10.199.64.20.nip.io/easylab/agent-worker-${LANG}:${TAG}}"
 NAME="${NAME:-ewtest-${LANG}}"
 CA_SECRET="${CA_SECRET:-ewtest-ca}"
 RULES_CM="${RULES_CM:?set RULES_CM to a ConfigMap holding rules.yaml for the sidecar}"

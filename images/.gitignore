@@ -5,6 +5,6 @@
 # Locally pre-downloaded toolchain artifacts (fetch-artifacts.sh).
 /cache/
 # Build-time mirrors of the toolchain artifacts.
-/easyworker
+/agent-worker
 # Mirror URL overrides for stage 1 (written by mirror.sh or by hand).
 /toolchain/urls.local.env

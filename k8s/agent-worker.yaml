@@ -1,27 +1,27 @@
-# easyworker: standalone host-runner deployment in the temp namespace.
+# agent-worker: standalone host-runner deployment in the temp namespace.
 # The same binary/image is also the worker injected into cluster sandboxes
 # (WORKER_PORT=48080 there); this deployment runs it as a long-lived service
 # for integration testing and as the forgejo-runner-style host target.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: easyworker
+  name: agent-worker
   namespace: temp
   labels:
-    app: easyworker
+    app: agent-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: easyworker
+      app: agent-worker
   template:
     metadata:
       labels:
-        app: easyworker
+        app: agent-worker
     spec:
       containers:
-        - name: easyworker
-          image: <registry>/easyworker:TAG
+        - name: agent-worker
+          image: <registry>/agent-worker:TAG
           imagePullPolicy: IfNotPresent
           env:
             - name: WORKER_PORT
@@ -59,14 +59,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker
+  name: agent-worker
   namespace: temp
   labels:
-    app: easyworker
+    app: agent-worker
 spec:
   type: ClusterIP
   selector:
-    app: easyworker
+    app: agent-worker
   ports:
     - name: http
       port: 80

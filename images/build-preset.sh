@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stage 2 of the two-stage preset build: take a generic stage-1 toolchain image
-# and inject easylab's capabilities (easyworker binary, this deployment's egress
+# and inject easylab's capabilities (agent-worker binary, this deployment's egress
 # MITM CA, trust env) so the result runs as a zero-injection worker.
 #
 #   DISTRO=debian-trixie ./build-preset.sh node
@@ -47,7 +47,7 @@ build() { # proto
     fi
   fi
   local src="${REGISTRY}/${NAMESPACE}/${TOOLCHAIN_REPO}-${proto}:${TOOLCHAIN_TAG}"
-  build_image "$name" "$df" "$PRESET_TAG" "$src" easyworker ca.crt
+  build_image "$name" "$df" "$PRESET_TAG" "$src" agent-worker ca.crt
 }
 
 for l in ${LANGS}; do

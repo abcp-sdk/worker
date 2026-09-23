@@ -1,6 +1,6 @@
-# easyworker on Windows — a non-privileged VM sandbox worker.
+# agent-worker on Windows — a non-privileged VM sandbox worker.
 #
-# This schedules a pre-baked Windows 11 image whose guest runs the easyworker
+# This schedules a pre-baked Windows 11 image whose guest runs the agent-worker
 # binary. KVM comes from the squat/generic-device-plugin as the extended
 # resource squat.ai/kvm (see k8s/generic-device-plugin.yaml); the pod itself
 # stays privileged: false.
@@ -14,19 +14,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: easyworker-windows
+  name: agent-worker-windows
   namespace: temp
   labels:
-    app: easyworker-windows
+    app: agent-worker-windows
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: easyworker-windows
+      app: agent-worker-windows
   template:
     metadata:
       labels:
-        app: easyworker-windows
+        app: agent-worker-windows
     spec:
       nodeSelector:
         kubernetes.io/hostname: <node-name>
@@ -35,7 +35,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: windows
-          image: <registry>/vm-images/easyworker-windows:v1.2.1
+          image: <registry>/vm-images/agent-worker-windows:v1.2.1
           imagePullPolicy: IfNotPresent
 
           # NOT privileged. KVM is delivered by the device plugin: requesting
@@ -86,13 +86,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-windows
+  name: agent-worker-windows
   namespace: temp
   labels:
-    app: easyworker-windows
+    app: agent-worker-windows
 spec:
   selector:
-    app: easyworker-windows
+    app: agent-worker-windows
   ports:
     - { name: http, port: 80, targetPort: 48080 }
     - { name: worker, port: 48080, targetPort: 48080 }
@@ -103,13 +103,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssh-easyworker-windows
+  name: ssh-agent-worker-windows
   namespace: temp
   labels:
-    app: easyworker-windows
+    app: agent-worker-windows
 spec:
   selector:
-    app: easyworker-windows
+    app: agent-worker-windows
   ports:
     - { name: ssh, port: 22, targetPort: 22 }
   type: ClusterIP
@@ -118,13 +118,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-windows-novnc
+  name: agent-worker-windows-novnc
   namespace: temp
   labels:
-    app: easyworker-windows
+    app: agent-worker-windows
 spec:
   selector:
-    app: easyworker-windows
+    app: agent-worker-windows
   ports:
     - { name: web, port: 80, targetPort: 8006 }
   type: ClusterIP

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
-# easyworker: single static Go binary, Connect RPC (worker.v1.WorkerService).
+# agent-worker: single static Go binary, Connect RPC (worker.v1.WorkerService).
 # Built via the cluster buildkitd (./build-image.sh), pushed to forgejo.
 #
-# The runtime image deliberately ships NO shell: easyworker brings its own
+# The runtime image deliberately ships NO shell: agent-worker brings its own
 # (mvdan.cc/sh interp) — alpine is here only for ca-certificates + curl
 # (in-cluster verification). The same binary is injected into arbitrary
 # sandbox base images, including scratch/distroless.
@@ -21,7 +21,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . ./
-RUN go build -trimpath -ldflags "-s -w" -o /out/easyworker ./cmd/easyworker
+RUN go build -trimpath -ldflags "-s -w" -o /out/agent-worker ./cmd/agent-worker
 
 FROM ${REGISTRY}/alpine:3.24
 ARG HTTP_PROXY
@@ -36,10 +36,10 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
 # Alpine CDN is left untouched (no mirror swap). apk honors the LOWERCASE
 # http_proxy/https_proxy variables.
 RUN apk add --no-cache ca-certificates curl
-COPY --from=build /out/easyworker /usr/local/bin/easyworker
+COPY --from=build /out/agent-worker /usr/local/bin/agent-worker
 # Default workspace is ~/workspace (the binary's own default); create it.
 RUN mkdir -p /root/workspace /data
 ENV WORKER_PORT=8080 \
     WORKER_DB=/data/jobs.db
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/easyworker"]
+ENTRYPOINT ["/usr/local/bin/agent-worker"]

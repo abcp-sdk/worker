@@ -1,20 +1,20 @@
-# easyworker preset images
+# agent-worker preset images
 
 Self-contained **dev-workflow** worker images, built in two stages:
 
 1. **toolchain** — generic language dev images. Nothing deployment-specific:
    no worker binary, no CA, no trust env. Usable as plain `docker run` dev
    shells. Pinned upstream artifacts are pre-downloaded and `COPY`ed in.
-2. **preset** — `easyworker` + this deployment's egress MITM CA baked in, so
+2. **preset** — `agent-worker` + this deployment's egress MITM CA baked in, so
    the image runs as a worker with **zero injection** (no worker hostPath, no
    CA env/volumes).
 
 ```sh
 ./extract-ca.sh                     # pull the deployment CA (ca.crt + ca.key)
-./build-worker.sh                   # cross-compile easyworker
+./build-worker.sh                   # cross-compile agent-worker
 ./fetch-artifacts.sh node           # pre-download node's tarballs (host-side)
 ./build-toolchain.sh node           # stage 1: toolchain-node
-./build-preset.sh node              # stage 2: easyworker-node
+./build-preset.sh node              # stage 2: agent-worker-node
 ./test-preset.sh node debian-trixie # run it as a pod, drive the worker API
 ```
 
@@ -36,7 +36,7 @@ Debian-only and libc++ on musl is not a supported target here. `cc` remains the
 gcc/libstdc++ image on both distros.
 
 Toolchain images live at `…/toolchain-<lang>:<tag>`, presets at
-`…/easyworker-<lang>:<tag>`. The two prefixes differ on purpose: a preset build
+`…/agent-worker-<lang>:<tag>`. The two prefixes differ on purpose: a preset build
 must not overwrite its own stage-1 base.
 
 ## Layout
@@ -86,7 +86,7 @@ managers. The rest need an explicit path or are wired to their own store:
 | Hex | `HEX_CACERTS_PATH` |
 | pixi | `PIXI_TLS_ROOT_CERTS=system` (bundled webpki roots by default) |
 
-All of these live in the **image** environment; `easyworker` forwards them to
+All of these live in the **image** environment; `agent-worker` forwards them to
 job processes through its job-env allowlist, so a CI step sees them without the
 pod spec carrying anything.
 

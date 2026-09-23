@@ -1,5 +1,5 @@
 # generic-device-plugin: admit /dev/kvm to the node as extended resource
-# squat.ai/kvm, so VM workloads (windows/macos easyworker) can use KVM while
+# squat.ai/kvm, so VM workloads (windows/macos agent-worker) can use KVM while
 # running with privileged: false.
 #
 # Background: under cgroup v2 the kubelet/containerd device controller is a BPF

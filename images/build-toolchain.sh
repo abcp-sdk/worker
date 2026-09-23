@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage 1 of the two-stage preset build: build the *generic* language/tool
 # dev images for one distro and push them. They contain NOTHING
-# deployment-specific — no easyworker binary, no egress CA, no trust env — and
+# deployment-specific — no agent-worker binary, no egress CA, no trust env — and
 # are usable as plain `docker run` dev shells. Stage 2 (build-preset.sh) layers
 # easylab on top.
 #

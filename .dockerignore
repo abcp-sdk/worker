@@ -1,0 +1,9 @@
+# Build context excludes: the worker Dockerfile only needs Go sources + go.mod.
+# The agent-toolchain artifact cache is multi-GB and is used by the
+# agent-toolchain build scripts, NOT by the worker image.
+agent-toolchain/cache/
+images/cache/
+.git/
+dist/
+*.log
+*.test

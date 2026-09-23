@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and push the easyworker Android (emulator) sandbox image.
+# Build and push the agent-worker Android (emulator) sandbox image.
 #
 #   ./images/android/build.sh
 #
@@ -9,19 +9,19 @@
 # is shared over noVNC (see entrypoint.sh).
 #
 # Prerequisites:
-#   * dist/easyworker-linux-amd64    (scripts/build-all.sh)
+#   * dist/agent-worker-linux-amd64    (scripts/build-all.sh)
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${DIR}/../.." && pwd)"
 
 REGISTRY="${REGISTRY:-forgejo.develop.10.199.64.20.nip.io}"
 NAMESPACE="${NAMESPACE:-root}"
-NAME="${NAME:-easyworker-android}"
+NAME="${NAME:-agent-worker-android}"
 TAG="${TAG:-v1.0.0}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"
 BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.temp.svc.cluster.local:1234}"
 PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
-WORKER_BIN="${WORKER_BIN:-${ROOT}/dist/easyworker-linux-amd64}"
+WORKER_BIN="${WORKER_BIN:-${ROOT}/dist/agent-worker-linux-amd64}"
 
 for f in "${DIR}/Dockerfile" "${DIR}/entrypoint.sh" "${DIR}/nginx.conf" \
          "${DIR}/sdk-init.gradle" "${WORKER_BIN}"; do
@@ -34,7 +34,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 cp "${DIR}/Dockerfile" "${DIR}/entrypoint.sh" "${DIR}/nginx.conf" \
    "${DIR}/sdk-init.gradle" "${WORK}/"
-cp "${WORKER_BIN}" "${WORK}/easyworker"
+cp "${WORKER_BIN}" "${WORK}/agent-worker"
 
 echo "Building ${NAME} -> ${DEST} (buildkitd=${BUILDKIT})"
 "${BUILDCTL}" --addr "${BUILDKIT}" build \

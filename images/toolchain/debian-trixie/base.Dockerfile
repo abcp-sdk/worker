@@ -4,7 +4,7 @@
 # Plain Debian trixie slim plus the utilities a dev workflow expects. Nothing
 # here knows about easylab: no worker binary, no egress CA, no trust env. Use
 # it (or a language image built on it) directly as `docker run` dev shells, or
-# let stage 2 (../inject/base.Dockerfile) turn it into an easyworker preset.
+# let stage 2 (../inject/base.Dockerfile) turn it into an agent-worker preset.
 #
 #   build-toolchain.sh base   # ./Dockerfile -> ${TOOLCHAIN_REPO}-base
 ARG BASE_IMAGE=debian:trixie-slim

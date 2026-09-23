@@ -44,7 +44,7 @@ TOOLCHAIN_TAG="${TOOLCHAIN_TAG:-${DISTRO_TAG}}"
 # easylab-ready presets (stage 2). EASYLAB is the in-cluster base URL of the
 # artifact service the sidecar rules point at.
 EASYLAB="${EASYLAB:-http://easylab.temp.svc.cluster.local}"
-PRESET_REPO="${PRESET_REPO:-easyworker}"
+PRESET_REPO="${PRESET_REPO:-agent-worker}"
 PRESET_TAG="${PRESET_TAG:-${DISTRO_TAG}}"
 
 # Which languages have a Dockerfile in the selected distro. Alpine/musl has no

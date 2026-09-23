@@ -1,4 +1,4 @@
-# easyworker Android sandbox — the official Android Emulator plus an Android
+# agent-worker Android sandbox — the official Android Emulator plus an Android
 # build toolchain, all in ONE container.
 #
 # A job can `gradle assembleDebug`, `adb install` and `am start` in one place:
@@ -18,26 +18,26 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: easyworker-android
+  name: agent-worker-android
   namespace: temp
   labels:
-    app: easyworker-android
+    app: agent-worker-android
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: easyworker-android
+      app: agent-worker-android
   template:
     metadata:
       labels:
-        app: easyworker-android
+        app: agent-worker-android
     spec:
       # Only needed if the image comes from a private registry.
       imagePullSecrets:
         - name: <registry-credentials>
       containers:
         - name: android
-          image: <registry>/easyworker-android:v1.0.0
+          image: <registry>/agent-worker-android:v1.0.0
           imagePullPolicy: IfNotPresent
 
           securityContext:
@@ -98,13 +98,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-android
+  name: agent-worker-android
   namespace: temp
   labels:
-    app: easyworker-android
+    app: agent-worker-android
 spec:
   selector:
-    app: easyworker-android
+    app: agent-worker-android
   ports:
     - { name: http, port: 80, targetPort: 48080 }
     - { name: worker, port: 48080, targetPort: 48080 }
@@ -114,13 +114,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: easyworker-android-novnc
+  name: agent-worker-android-novnc
   namespace: temp
   labels:
-    app: easyworker-android
+    app: agent-worker-android
 spec:
   selector:
-    app: easyworker-android
+    app: agent-worker-android
   ports:
     - { name: novnc, port: 80, targetPort: 6080 }
   type: ClusterIP

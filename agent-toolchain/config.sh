@@ -2,13 +2,13 @@
 # Shared knobs for the AGENT-TOOLCHAIN base images.
 #
 # This tree lives in the worker repo (abcp-sdk/worker/agent-toolchain) and is a
-# curated subset of easyworker's stage-1 toolchain build (see
+# curated subset of agent-worker's stage-1 toolchain build (see
 # /home/user/easylab-platform/easyworker/images). It differs on purpose:
 #
 #   * Registry/namespace default to the shared catalog namespace
 #     (git.agent.svc.cluster.local/agent-toolchain) with NATIVE `<lang>:<distro>` tags.
 #   * NO egress MITM CA and NO worker binary are baked in. The gateway injects
-#     easyworker into ANY base image at sandbox launch time (derive-on-launch).
+#     agent-worker into ANY base image at sandbox launch time (derive-on-launch).
 #     These are plain dev toolchain images.
 #
 # The gateway's list-oci-images default (owner=agent-toolchain) surfaces exactly
@@ -54,7 +54,7 @@ TOOLCHAIN_TAG="${TOOLCHAIN_TAG:-${DISTRO_TAG}}"
 # because it deliberately ships WITHOUT gcc.
 WORKSPACE_LANGS="${WORKSPACE_LANGS:-node python go rust java kotlin scala dart dotnet elixir php ruby swift zig clang}"
 
-# Artifact cache. The workspace cache hardlinks the easyworker one and adds the
+# Artifact cache. The workspace cache hardlinks the agent-worker one and adds the
 # versions the workspace pins (node 26.9.0, JDK 26, sbt 1.13.0, zig 0.16.0).
 CACHE_ROOT="${CACHE_ROOT:-${HERE}/cache}"
 

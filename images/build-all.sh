@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build BOTH stages, in order:
 #   1. build-toolchain.sh  generic language dev images (no easylab content)
-#   2. build-preset.sh     easyworker presets = toolchain + worker + baked CA
+#   2. build-preset.sh     agent-worker presets = toolchain + worker + baked CA
 #
 #   ./build-all.sh             # everything
 #   ./build-all.sh node java   # just those languages (plus the two bases)

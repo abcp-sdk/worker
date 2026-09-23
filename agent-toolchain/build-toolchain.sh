@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the AGENT-TOOLCHAIN generic dev images and push them to the registry
-# under the `agent-toolchain` namespace. No easyworker, no CA — plain dev
+# under the `agent-toolchain` namespace. No agent-worker, no CA — plain dev
 # images (the gateway injects the worker at sandbox launch).
 #
 #   DISTRO=debian-trixie ./build-toolchain.sh node

@@ -1,4 +1,4 @@
-# easyworker Android sandbox: the official Android Emulator (AOSP) with an
+# agent-worker Android sandbox: the official Android Emulator (AOSP) with an
 # Android build toolchain in the same container, viewable in a browser.
 #
 # One container = build toolchain (JDK 21, Gradle, Android SDK) + a
@@ -87,8 +87,8 @@ ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
 RUN mkdir -p /root/.gradle/init.d
 COPY --chmod=644 ./sdk-init.gradle /root/.gradle/init.d/sdk.gradle
 
-# --- easyworker (host side) ----------------------------------------------
-COPY --chmod=755 ./easyworker /usr/local/bin/easyworker
+# --- agent-worker (host side) ----------------------------------------------
+COPY --chmod=755 ./agent-worker /usr/local/bin/agent-worker
 
 # --- browser screen -------------------------------------------------------
 # nginx-light's main config already includes /etc/nginx/sites-enabled/*.

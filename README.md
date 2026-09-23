@@ -9,6 +9,12 @@ worker modifications. It is the abcp-sdk-owned source of the worker binary:
   images at launch (derive-on-launch); the gateway vendors a byte-identical
   copy under `workspace-gateway/worker-src`.
 
+The binary is now **`agent-worker`** (Go module
+`github.com/abcp-sdk/agent-worker`), and it ships a built-in static **control
+panel** served from its own port at `/` (same-origin with the Connect RPC): a
+login gate (bearer token, or one-time-code claim), a shell-style console with
+live output, and Files/Jobs drawers. See `internal/webui/`.
+
 This repo also owns the **`agent-toolchain`** image catalog
 (`agent-toolchain/`): the generic language dev images pushed to the registry's
 `agent-toolchain` namespace, used as sandbox bases / service images. See
@@ -98,18 +104,18 @@ live fanout; the DB is the unbounded authority.
 proto/worker/v1/worker.proto     contract source of truth
 proto/buf.gen.worker.yaml        buf codegen (protocolbuffers/go + connectrpc/go)
 gen/worker/v1/                   generated pb + connect code
-cmd/easyworker/                  binary: flags, env, listener (h1+h2c)
+cmd/agent-worker/                  binary: flags, env, listener (h1+h2c)
 internal/shellh/                 builtin shell (interp + exec/open handlers,
                                  build-tagged kill: pgroup | Job Object)
 internal/jobsvc/                 manager (ring + fanout) + sqlite store
 internal/filesvc/                binary-safe file ops, workspace containment
 internal/service.go              Connect handlers (unary + WatchJob streaming)
-k8s/easyworker.yaml              standalone host-runner Deployment (linux)
+k8s/agent-worker.yaml              standalone host-runner Deployment (linux)
 k8s/generic-device-plugin.yaml   admit /dev/kvm as squat.ai/kvm (unprivileged VMs)
-k8s/easyworker-windows.yaml      non-privileged Windows VM worker (+ Services)
-k8s/easyworker-macos.yaml        non-privileged macOS VM worker (+ Services)
-k8s/easyworker-macos-xcode.yaml  the same, Xcode image, 2 vCPU / 8 GiB
-k8s/easyworker-android.yaml      Android build toolchain + emulator + noVNC, one container
+k8s/agent-worker-windows.yaml      non-privileged Windows VM worker (+ Services)
+k8s/agent-worker-macos.yaml        non-privileged macOS VM worker (+ Services)
+k8s/agent-worker-macos-xcode.yaml  the same, Xcode image, 2 vCPU / 8 GiB
+k8s/agent-worker-android.yaml      Android build toolchain + emulator + noVNC, one container
 images/android/                  Dockerfile + entrypoint + noVNC front for the emulator sandbox
 ```
 
@@ -122,14 +128,14 @@ cd proto && buf lint && buf generate --template buf.gen.worker.yaml
 ## Run (dev)
 
 ```
-go run ./cmd/easyworker --addr 127.0.0.1:9090 --workspace /tmp/ws
+go run ./cmd/agent-worker --addr 127.0.0.1:9090 --workspace /tmp/ws
 curl -X POST -H 'Content-Type: application/json' -d '{}' \
      http://127.0.0.1:9090/worker.v1.WorkerService/Info
 ```
 
 Env: `WORKER_PORT` (default 8080; cluster sandboxes pin 48080),
 `WORKER_WORKSPACE` (default `~/EasyLab/workspace`, sandboxes use `/workspace`),
-`WORKER_DB` (default `easyworker.db`).
+`WORKER_DB` (default `agent-worker.db`).
 
 ## Auth / exclusive enrollment
 
@@ -156,20 +162,20 @@ token keeps working. Set `WORKER_STATE_FILE=off` to disable persistence
 
 Reusable client (no easylab dependency): `github.com/easylab-platform/easyworker/client`
 (`Enroll` / `Status` / `Release` / `Bearer` / `Dial`), plus the
-`easyworker-enroll` CLI.
+`agent-worker-enroll` CLI.
 
 Other env: `WORKER_REQUIRE_AUTH=0` disables auth (dev only).
 
 ## Build & deploy (cluster)
 
 `./build-image.sh` builds via the shared buildkitd and pushes to forgejo;
-`kubectl apply -f k8s/easyworker.yaml` deploys to the `temp` namespace
+`kubectl apply -f k8s/agent-worker.yaml` deploys to the `temp` namespace
 (emptyDir `/data` for the history DB). Local bare-metal deployment is
 intentionally NOT supported — container + k8s only.
 
 ## Windows / macOS VM sandboxes without `privileged: true`
 
-easyworker also runs inside full **Windows / macOS VMs** (dockur-style golden
+agent-worker also runs inside full **Windows / macOS VMs** (dockur-style golden
 images) so a sandbox can build native desktop apps. Those workloads need KVM,
 and under **cgroup v2** the device controller is a BPF allow-list: Kubernetes
 has no per-device field, so a container normally cannot open `/dev/kvm` unless
@@ -203,12 +209,12 @@ Apply order:
 
 ```sh
 kubectl apply -f k8s/generic-device-plugin.yaml
-kubectl apply -f k8s/easyworker-windows.yaml
-kubectl apply -f k8s/easyworker-macos.yaml
+kubectl apply -f k8s/agent-worker-windows.yaml
+kubectl apply -f k8s/agent-worker-macos.yaml
 ```
 
-Full, ready-to-use examples live in `k8s/easyworker-windows.yaml` and
-`k8s/easyworker-macos.yaml` (worker API / SSH / noVNC Services included).
+Full, ready-to-use examples live in `k8s/agent-worker-windows.yaml` and
+`k8s/agent-worker-macos.yaml` (worker API / SSH / noVNC Services included).
 
 ### Token without a sidecar
 
@@ -274,7 +280,7 @@ COPY --chmod=644 ./00-token.conf /etc/nginx/conf.d/00-token.conf
 COPY --chmod=755 ./start.sh /run/start.sh    # writes $WORKER_TOKEN to /run/shm/token
 ```
 
-The guest launcher (installed in the image) starts easyworker with
+The guest launcher (installed in the image) starts agent-worker with
 `WORKER_TOKEN` set from the fetched token, so the pod's `WORKER_TOKEN` env is
 the single knob.
 
@@ -330,8 +336,8 @@ never reaches a job — the image ships a global Gradle init script that writes
 
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
-./images/android/build.sh                   # -> <registry>/easyworker-android:v1.0.0
-kubectl apply -f k8s/easyworker-android.yaml
+./images/android/build.sh                   # -> <registry>/agent-worker-android:v1.0.0
+kubectl apply -f k8s/agent-worker-android.yaml
 ```
 
 The AVD is created on first start and its userdata lives on `/data` (an

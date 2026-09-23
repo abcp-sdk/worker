@@ -8,7 +8,7 @@
 # no libc++ at all); the `-23` suite is the current stable line. The suite comes
 # from an in-region mirror (fast), the ~3 KB signing key from apt.llvm.org.
 # Conan 2 is a Python tool shipped as an offline wheel set (same as the
-# easyworker conan image) so `conan install` works without a registry.
+# agent-worker conan image) so `conan install` works without a registry.
 ARG BASE_IMAGE=toolchain-base:debian-trixie
 FROM ${BASE_IMAGE}
 

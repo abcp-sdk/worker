@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 # Stage 2: easylab capability injection, applied on top of a stage-1
 # toolchain image. This turns any generic dev image into a self-contained
-# easyworker preset by baking in:
+# agent-worker preset by baking in:
 #
-#   * the easyworker binary (PID 1, its own shell)
+#   * the agent-worker binary (PID 1, its own shell)
 #   * this deployment's egress MITM CA, merged into the system trust store
 #   * the trust env for runtimes that ignore the system bundle
 #
@@ -30,7 +30,7 @@ RUN install -Dm644 /usr/local/share/ca-certificates/easylab-egress-ca.crt /usr/l
     && update-ca-certificates
 
 # Worker trust knobs for the runtimes that do NOT read the system bundle or
-# need an explicit path. easyworker's job-env allowlist forwards these.
+# need an explicit path. agent-worker's job-env allowlist forwards these.
 #
 # They all point at the FULL system bundle (public roots + our CA), not at the
 # bare egress CA: hosts that the rule set leaves `direct` still need the real
@@ -52,13 +52,13 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
 # name is distro-generated).
 ENV NODE_EXTRA_CA_CERTS=/usr/local/share/easylab/egress-ca.crt
 
-# easyworker as PID 1: it brings its own shell (mvdan/sh), so no shell is
+# agent-worker as PID 1: it brings its own shell (mvdan/sh), so no shell is
 # needed at runtime.
-COPY easyworker /usr/local/bin/easyworker
+COPY agent-worker /usr/local/bin/agent-worker
 RUN mkdir -p /workspace /data
 ENV WORKER_PORT=48080 \
     WORKER_WORKSPACE=/workspace \
     WORKER_DB=/data/jobs.db
 EXPOSE 48080
 WORKDIR /workspace
-ENTRYPOINT ["/usr/local/bin/easyworker"]
+ENTRYPOINT ["/usr/local/bin/agent-worker"]

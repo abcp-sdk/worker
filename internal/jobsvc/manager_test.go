@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/easylab-platform/easyworker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/shellh"
 )
 
 func newTestManager(t *testing.T) (*Manager, string) {

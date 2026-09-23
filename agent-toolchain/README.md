@@ -9,14 +9,14 @@ from `service-deploy`.
 
 This tree was moved here from `workspace-gateway/images/` so the worker repo
 owns the whole execution-image story (worker binary + the images sandboxes run
-on). It is a curated subset of easyworker's stage-1 toolchain build
+on). It is a curated subset of agent-worker's stage-1 toolchain build
 (`easylab-platform/easyworker/images`), with two deliberate differences:
 
 - Registry/namespace default to the shared catalog
   (`git.agent.svc.cluster.local/agent-toolchain`) with NATIVE `<lang>:<distro>`
   tags.
 - **No egress MITM CA and no worker binary are baked in** — the gateway injects
-  easyworker at sandbox launch. These are plain dev images.
+  agent-worker at sandbox launch. These are plain dev images.
 
 ## Layout
 

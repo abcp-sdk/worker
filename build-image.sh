@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build and push OUR easyworker image WITHOUT a local build daemon.
+# Build and push OUR agent-worker image WITHOUT a local build daemon.
 # Mirrors the other abcp-sdk build-image.sh scripts: in-cluster buildkitd ->
 # docker archive -> skopeo -> forgejo OCI.
 #
-# This is the abcp-sdk-owned copy of easyworker. It carries the workspace
+# This is the abcp-sdk-owned copy of agent-worker. It carries the workspace
 # gateway's modifications (no workspace-root containment in filesvc: relative
 # paths resolve under the workspace, absolute paths are used as-is; the default
 # workspace is ~/workspace; the Dockerfile does not bake a proxy or a mirror
@@ -14,7 +14,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
 NAMESPACE="${NAMESPACE:-abcp}"
-NAME="${NAME:-worker}"
+NAME="${NAME:-agent-worker}"
 TAG="${TAG:-$(date +%Y%m%d%H%M%S)}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"
 BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.agent.svc.cluster.local:1234}"
