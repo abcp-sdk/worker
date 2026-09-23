@@ -7,3 +7,9 @@ images/cache/
 dist/
 *.log
 *.test
+
+# webui: the node_modules tree is huge and only needed to (re)build the SPA.
+# internal/webui/dist (the built SPA) IS shipped in the context — it is embedded
+# by go:embed.
+webui/node_modules/
+webui/dist/

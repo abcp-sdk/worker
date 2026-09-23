@@ -10,10 +10,20 @@ worker modifications. It is the abcp-sdk-owned source of the worker binary:
   copy under `workspace-gateway/worker-src`.
 
 The binary is now **`agent-worker`** (Go module
-`github.com/abcp-sdk/agent-worker`), and it ships a built-in static **control
-panel** served from its own port at `/` (same-origin with the Connect RPC): a
-login gate (bearer token, or one-time-code claim), a shell-style console with
-live output, and Files/Jobs drawers. See `internal/webui/`.
+`github.com/abcp-sdk/agent-worker`), and it ships a built-in **control panel**
+served from its own port at `/` (same-origin with the Connect RPC): a login gate
+(bearer token, or one-time-code claim), a shell-style console with live output
+and a **Detach** button, and mutually-exclusive Files (drag-drop upload) and
+Jobs (view/kill output) drawers.
+
+The panel source lives in `webui/` (Svelte 5 + Tailwind 4 + shadcn-svelte
+primitives) and builds with vite into `internal/webui/dist`, which the Go binary
+embeds via `go:embed`. **`internal/webui/dist` is committed**, so a plain
+`go build` needs no Node toolchain; regenerate it after UI changes with:
+
+```sh
+npm --prefix webui ci && npm --prefix webui run build
+```
 
 This repo also owns the **`agent-toolchain`** image catalog
 (`agent-toolchain/`): the generic language dev images pushed to the registry's

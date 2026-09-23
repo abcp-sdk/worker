@@ -20,6 +20,9 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+# internal/webui/dist (the built SPA, embedded via go:embed) is COMMITTED, so a
+# plain source build needs no Node toolchain. Regenerate it with
+# `npm --prefix webui ci && npm --prefix webui run build`.
 COPY . ./
 RUN go build -trimpath -ldflags "-s -w" -o /out/agent-worker ./cmd/agent-worker
 

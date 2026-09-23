@@ -1,0 +1,62 @@
+<script lang="ts">
+  // App — the root: a login gate, then the shell + mutually-exclusive
+  // Files/Jobs drawers. On desktop the drawer is half the width; on phones it
+  // is full-width so it is actually usable.
+  import { onMount } from 'svelte'
+  import { Button } from '$lib/components/ui/button'
+  import LoginGate from '$lib/LoginGate.svelte'
+  import ShellPage from '$lib/pages/ShellPage.svelte'
+  import FilesDrawer from '$lib/pages/FilesDrawer.svelte'
+  import JobsDrawer from '$lib/pages/JobsDrawer.svelte'
+  import { session, setToken } from '$lib/session.svelte'
+
+  let entered = $state(session.connected)
+  let drawer = $state<'files' | 'jobs' | null>(null)
+
+  onMount(() => {
+    document.documentElement.dataset.theme = 'dark'
+  })
+
+  function signOut() {
+    setToken('')
+    session.connected = false
+    session.workspace = ''
+    entered = false
+    drawer = null
+  }
+
+  function toggle(which: 'files' | 'jobs') {
+    drawer = drawer === which ? null : which
+  }
+</script>
+
+{#if !entered}
+  <LoginGate onEnter={() => (entered = true)} />
+{:else}
+  <div class="flex h-dvh flex-col overflow-hidden bg-background">
+    <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card px-3">
+      <span class="flex items-center gap-2 font-semibold">
+        <span class="flex size-5 items-center justify-center rounded-md bg-primary font-mono text-[10px] font-bold text-primary-foreground">AW</span>
+        Agent Worker
+      </span>
+      <span class="hidden font-mono text-micro text-muted-foreground sm:inline">{session.os}/{session.arch}</span>
+      <span class="ml-auto"></span>
+      <Button variant="ghost" size="sm" class={drawer === 'files' ? 'bg-muted text-foreground' : ''} onclick={() => toggle('files')}>Files</Button>
+      <Button variant="ghost" size="sm" class={drawer === 'jobs' ? 'bg-muted text-foreground' : ''} onclick={() => toggle('jobs')}>Jobs</Button>
+      <Button variant="ghost" size="sm" onclick={signOut}>Sign out</Button>
+    </header>
+
+    <div class="relative flex min-h-0 flex-1">
+      <ShellPage />
+      {#if drawer === 'files'}
+        <aside class="flex min-h-0 w-full flex-col border-border bg-card max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:border-l-0 sm:w-1/2 sm:border-l">
+          <FilesDrawer onClose={() => (drawer = null)} />
+        </aside>
+      {:else if drawer === 'jobs'}
+        <aside class="flex min-h-0 w-full flex-col border-border bg-card max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:border-l-0 sm:w-1/2 sm:border-l">
+          <JobsDrawer onClose={() => (drawer = null)} />
+        </aside>
+      {/if}
+    </div>
+  </div>
+{/if}
