@@ -1,6 +1,6 @@
 # worker (`abcp-sdk/worker`)
 
-**Fork of `easylab-platform/easyworker`** carrying the workspace-gateway's
+**Fork of the upstream EasyLab worker** carrying the workspace-gateway's
 worker modifications. It is the abcp-sdk-owned source of the worker binary:
 
 - the standalone/class stacks deploy it as a fixed sandbox (`class-worker`,
@@ -20,7 +20,7 @@ This repo also owns the **`agent-toolchain`** image catalog
 `agent-toolchain` namespace, used as sandbox bases / service images. See
 `agent-toolchain/README.md`.
 
-Fork deltas relative to upstream (`easylab-platform/easyworker@e6e069d`):
+Fork deltas relative to upstream (the upstream EasyLab worker (`e6e069d`)):
 
 1. **filesvc: no workspace-root containment.** A relative path resolves under
    the workspace; an absolute path is used as-is, so the worker may read/write
@@ -160,7 +160,7 @@ token** after a process/host restart: no re-claim, the controller's stored
 token keeps working. Set `WORKER_STATE_FILE=off` to disable persistence
 (in-memory only). Corrupt state fails safe (treated as unclaimed).
 
-Reusable client (no easylab dependency): `github.com/easylab-platform/easyworker/client`
+Reusable client (no easylab dependency): the upstream EasyLab worker client package
 (`Enroll` / `Status` / `Release` / `Bearer` / `Dial`), plus the
 `agent-worker-enroll` CLI.
 

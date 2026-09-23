@@ -1,6 +1,6 @@
 # build artifacts / binaries
 /dist/
-/ewtest
+/awtest
 /worker-bin/
 .last-image
 

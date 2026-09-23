@@ -3,7 +3,7 @@
 #
 # This tree lives in the worker repo (abcp-sdk/worker/agent-toolchain) and is a
 # curated subset of agent-worker's stage-1 toolchain build (see
-# /home/user/easylab-platform/easyworker/images). It differs on purpose:
+# the upstream EasyLab worker images tree). It differs on purpose:
 #
 #   * Registry/namespace default to the shared catalog namespace
 #     (git.agent.svc.cluster.local/agent-toolchain) with NATIVE `<lang>:<distro>` tags.

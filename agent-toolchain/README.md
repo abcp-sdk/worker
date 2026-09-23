@@ -10,7 +10,7 @@ from `service-deploy`.
 This tree was moved here from `workspace-gateway/images/` so the worker repo
 owns the whole execution-image story (worker binary + the images sandboxes run
 on). It is a curated subset of agent-worker's stage-1 toolchain build
-(`easylab-platform/easyworker/images`), with two deliberate differences:
+(the upstream EasyLab worker images tree), with two deliberate differences:
 
 - Registry/namespace default to the shared catalog
   (`git.agent.svc.cluster.local/agent-toolchain`) with NATIVE `<lang>:<distro>`

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deploy agent-worker to a dockur VM over SSH and run the ewtest suite on it.
+"""Deploy agent-worker to a dockur VM over SSH and run the awtest suite on it.
 
 Usage: vmtest.py <macos|windows>
 Reads dist/ binaries built by scripts/build-all.sh. Prints the remote test
-output; exit code mirrors the remote ewtest exit code.
+output; exit code mirrors the remote awtest exit code.
 """
 import sys
 import time
@@ -11,8 +11,8 @@ import time
 import paramiko
 
 VMS = {
-    "macos": dict(host="ssh-macos.temp.svc.cluster.local", worker="agent-worker-darwin-amd64", test="ewtest-darwin-amd64"),
-    "windows": dict(host="ssh-windows.temp.svc.cluster.local", worker="agent-worker-windows-amd64.exe", test="ewtest-windows-amd64.exe"),
+    "macos": dict(host="ssh-macos.temp.svc.cluster.local", worker="agent-worker-darwin-amd64", test="awtest-darwin-amd64"),
+    "windows": dict(host="ssh-windows.temp.svc.cluster.local", worker="agent-worker-windows-amd64.exe", test="awtest-windows-amd64.exe"),
 }
 USER, PASS = "docker", "admin"
 
@@ -61,7 +61,7 @@ def main():
                "@{CommandLine='C:\\Users\\docker\\agent-worker-windows-amd64.exe "
                "-workspace C:\\Users\\docker\\ws -db C:\\Users\\docker\\ws\\jobs.db'}")
     else:
-        run(c, "chmod +x /Users/docker/agent-worker-darwin-amd64 /Users/docker/ewtest-darwin-amd64", quiet=True)
+        run(c, "chmod +x /Users/docker/agent-worker-darwin-amd64 /Users/docker/awtest-darwin-amd64", quiet=True)
         run(c, "cd /Users/docker && WORKER_WORKSPACE=/Users/docker/ws WORKER_DB=/Users/docker/ws/jobs.db "
                "nohup ./agent-worker-darwin-amd64 > /Users/docker/worker.log 2>&1 & sleep 1; echo started")
 
@@ -81,13 +81,13 @@ def main():
         run(c, f"cat {home}/worker.err" if which != "windows" else f"type {home}\\worker.err")
         sys.exit(2)
 
-    print(f"== ewtest on {which} ==")
+    print(f"== awtest on {which} ==")
     tcmd = f"{home}/{vm['test']}".replace("/", "\\") if which == "windows" else f"{home}/{vm['test']}"
     rc, o, e = run(c, tcmd, timeout=300)
     print(o)
     if e.strip():
         print("STDERR:", e)
-    print(f"== {which}: ewtest exit={rc} ==")
+    print(f"== {which}: awtest exit={rc} ==")
     c.close()
     sys.exit(rc)
 
