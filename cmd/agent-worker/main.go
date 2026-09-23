@@ -56,9 +56,14 @@ func main() {
 		db = envOr("WORKER_DB", "agent-worker.db")
 	}
 
-	// Job env: clean base + passthrough of proxy/registry knobs (ext-ops /
-	// easylab inject these; the worker's own environ is NOT inherited — the
-	// binary may hold platform tokens).
+	// Capture the pre-authorized token, then drop it from the process
+	// environment BEFORE building the job env: jobs inherit the worker's
+	// environ (see jobEnv), and the token must not travel with them. The auth
+	// gate below keeps the returned value in memory.
+	bootToken := takeBootToken()
+
+	// Job env: inherit the worker's own environment (the sandbox image is the
+	// source of truth for toolchain variables); the token is already gone.
 	env := jobEnv()
 
 	runner := shellh.New(ws, env)
@@ -80,7 +85,7 @@ func main() {
 		stateStore = auth.NewFileStore(sf)
 	}
 	gate, err := auth.New(auth.Options{
-		PreAuthorizedToken: os.Getenv("WORKER_TOKEN"),
+		PreAuthorizedToken: bootToken,
 		Disabled:           os.Getenv("WORKER_REQUIRE_AUTH") == "0",
 		BootID:             svc.BootID(),
 		State:              stateStore,
@@ -187,62 +192,70 @@ func defaultWorkspace() string {
 	return filepath.Join(home, "workspace")
 }
 
-// jobEnv builds the base environment for interpreted jobs: proxy + registry
-// knobs and CA/trust configuration only (explicitly allowlisted). Everything
-// else is dropped.
+// takeBootToken reads WORKER_TOKEN and then removes it from the process
+// environment, so jobs (which inherit the worker's environ — see jobEnv) can
+// never see it. Callers keep the returned value in memory for the auth gate.
+func takeBootToken() string {
+	tok := os.Getenv("WORKER_TOKEN")
+	if tok != "" {
+		_ = os.Unsetenv("WORKER_TOKEN")
+	}
+	return tok
+}
+
+// jobEnv builds the base environment for interpreted jobs by INHERITING the
+// worker's own environment. The sandbox image (or the host launcher) is the
+// source of truth for toolchain variables, so a default-deny allowlist would
+// have to enumerate every variable of every toolchain — an endless, brittle
+// treadmill that breaks Windows (cmd.exe/ComSpec, MSVC, .NET, Gradle, pip…)
+// and any newly added tool. Inheritance means a new toolchain works with no
+// code change.
 //
-// The CA/trust entries matter for preset images (easylab/agent-worker-<lang>):
-// those bake the egress CA into the image and set the per-runtime variables
-// here. Without forwarding them, a job would run in an image whose OWN
-// environment carries the trust config but the child process would not see it.
+// The only secret the worker itself holds (WORKER_TOKEN) is removed from the
+// process environment before this runs (takeBootToken), so it is not
+// inherited. This is NOT a security boundary — a job runs at the same
+// privilege as the worker and could read /proc/<pid>/environ or worker.state
+// regardless — it only prevents ACCIDENTAL leakage via `env`/verbose builds.
+//
+// Per-job ExecuteRequest.env is layered on top by the runner (additive,
+// overriding), so callers can still inject arbitrary variables per job.
 func jobEnv() []string {
-	var out []string
-	pass := []string{
-		"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy",
-		"NO_PROXY", "no_proxy",
-		"NPM_CONFIG_REGISTRY", "PIP_INDEX_URL", "GOPROXY", "GOSUMDB",
-		"CARGO_REGISTRIES_CRATES_IO_INDEX",
-		// CA / trust configuration (system bundle and per-runtime overrides).
-		"SSL_CERT_FILE", "SSL_CERT_DIR",
-		"CURL_CA_BUNDLE", "GIT_SSL_CAINFO", "GIT_SSL_CAPATH",
-		"REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "PIP_CERT",
-		"NODE_EXTRA_CA_CERTS", "NODE_OPTIONS",
-		"AWS_CA_BUNDLE", "DENO_CERT", "CARGO_HTTP_CAINFO",
-		"COMPOSER_CAFILE", "HEX_CACERTS_PATH", "NIX_SSL_CERT_FILE",
-		"DART_VM_OPTIONS", "UV_NATIVE_TLS", "UV_SYSTEM_CERTS",
-		"JAVA_TOOL_OPTIONS", "JAVA_HOME",
-		// C/C++ toolchain selection (the `cpp` preset makes clang + libc++ the
-		// default compiler and standard library; CMake seeds its compiler and
-		// flags from these, so a job must see them too).
-		"CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "CMAKE_GENERATOR",
-		"LANG", "LC_ALL", // locale: toolchains localize output/messages
-		"PATH", // toolchains need PATH; the host PATH is acceptable (no secrets)
-		"HOME", "TMPDIR", "USER",
-	}
-	for _, k := range pass {
-		if v, ok := os.LookupEnv(k); ok {
-			out = append(out, k+"="+v)
-		}
-	}
-	if !containsKey(out, "SSL_CERT_FILE") {
-		if f := firstExistingFile(
-			"/etc/ssl/certs/ca-certificates.crt",
-			"/etc/ssl/cert.pem",
-			"/etc/pki/tls/certs/ca-bundle.crt",
-		); f != "" {
-			out = append(out, "SSL_CERT_FILE="+f)
-		}
-	}
-	// Windows: ensure SystemRoot etc are present or the loader fails.
+	out := os.Environ()
+
+	// Synthesize platform defaults the process may be missing (e.g. a minimal
+	// container with no PATH). Only fills gaps; never overrides.
 	if runtime.GOOS == "windows" {
-		for _, k := range []string{"SystemRoot", "SYSTEMROOT", "windir", "TEMP", "USERPROFILE", "APPDATA"} {
-			if v, ok := os.LookupEnv(k); ok && !containsKey(out, k) {
-				out = append(out, k+"="+v)
+		defaults := [][2]string{
+			{"SystemRoot", os.Getenv("SystemRoot")},
+			{"SystemDrive", os.Getenv("SystemDrive")},
+			{"ComSpec", os.Getenv("ComSpec")},
+			{"windir", os.Getenv("windir")},
+			{"ProgramData", os.Getenv("ProgramData")},
+			{"ProgramFiles", os.Getenv("ProgramFiles")},
+			{"ProgramFiles(x86)", os.Getenv("ProgramFiles(x86)")},
+			{"LOCALAPPDATA", os.Getenv("LOCALAPPDATA")},
+			{"USERPROFILE", os.Getenv("USERPROFILE")},
+		}
+		for _, kv := range defaults {
+			if kv[1] != "" && !containsKey(out, kv[0]) {
+				out = append(out, kv[0]+"="+kv[1])
 			}
 		}
-	}
-	if runtime.GOOS != "windows" && !containsKey(out, "PATH") {
-		out = append(out, "PATH="+defaultUnixPath())
+	} else {
+		if !containsKey(out, "PATH") {
+			out = append(out, "PATH="+defaultUnixPath())
+		}
+		// CA/trust: preset images bake the egress CA but may not export it; the
+		// system bundle path is a safe fallback so TLS clients keep working.
+		if !containsKey(out, "SSL_CERT_FILE") {
+			if f := firstExistingFile(
+				"/etc/ssl/certs/ca-certificates.crt",
+				"/etc/ssl/cert.pem",
+				"/etc/pki/tls/certs/ca-bundle.crt",
+			); f != "" {
+				out = append(out, "SSL_CERT_FILE="+f)
+			}
+		}
 	}
 	return out
 }

@@ -1,6 +1,6 @@
 // Command trustprobe checks that a worker image's TLS trust is configured for
 // the egress sidecar: it runs a set of protocol commands THROUGH the worker
-// API (so the worker's job-env allowlist is exercised, not just the image
+// API (so the worker's job environment is exercised, not just the image
 // environment) and reports which ones succeed.
 //
 // Usage:

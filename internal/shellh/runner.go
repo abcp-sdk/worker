@@ -27,8 +27,8 @@ type Runner struct {
 	// default cwd for jobs.
 	Workspace string
 
-	// Env is the base environment (already stripped/allowlisted by the
-	// caller in main).
+	// Env is the base environment (built by the caller in main; it inherits
+	// the worker's environ with WORKER_TOKEN removed).
 	Env []string
 
 	mu     sync.Mutex
@@ -277,7 +277,7 @@ func (lb *LineBuffer) Tail(n int) string {
 }
 
 // execMiddleware is the builtin executor's process seam: every external
-// command the interpreter runs lands here. We pin cwd, allowlist env, and
+// command the interpreter runs lands here. We pin cwd, set the job env, and
 // register the process for kill. Windows batch wrappers (.cmd/.bat) are
 // transparently dispatched via cmd /c (see exec_windows.go).
 // Debugf is a platform-overridable trace hook (windows wires it to a log

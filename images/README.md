@@ -86,9 +86,9 @@ managers. The rest need an explicit path or are wired to their own store:
 | Hex | `HEX_CACERTS_PATH` |
 | pixi | `PIXI_TLS_ROOT_CERTS=system` (bundled webpki roots by default) |
 
-All of these live in the **image** environment; `agent-worker` forwards them to
-job processes through its job-env allowlist, so a CI step sees them without the
-pod spec carrying anything.
+All of these live in the **image** environment; `agent-worker` passes its own
+environment through to job processes (jobs inherit it), so a CI step sees them
+without the pod spec carrying anything.
 
 `ca.crt` and `ca.key` are **not** committed (they differ per deployment);
 `ca.key` is the sidecar's signing key and is only needed by `test-preset.sh`.

@@ -67,10 +67,16 @@ no passthrough to a host shell and no fallback, on any platform:
 - explicit `bash -c "…"` still works: bash is just another external binary
   the interpreter spawns
 
-Job env is allowlisted (proxy/registry knobs + PATH/HOME) — the worker's own
-environment (which may hold platform tokens) is never inherited. Callers may
-additionally pass per-job env on `Execute` (`ExecuteRequest.env`), which is
-layered on top of the allowlisted base.
+Job env **inherits the worker's own environment** — the sandbox image is the
+source of truth for toolchain variables, so a new toolchain works with no code
+change (an allowlist would have to enumerate every variable of every toolchain
+and constantly breaks, e.g. Windows `ComSpec`/`ProgramData`). The one secret the
+worker holds, `WORKER_TOKEN`, is removed from the process environment at startup
+before the job env is built, so it is never inherited. This is not a security
+boundary (a job runs at the worker's privilege and could read `/proc/<pid>/
+environ` or `worker.state` anyway); it only prevents accidental leakage via
+`env`/verbose builds. Callers may additionally pass per-job env on `Execute`
+(`ExecuteRequest.env`), layered on top of the inherited base.
 
 ## Pure executor: no repo/rev knowledge
 
@@ -339,10 +345,10 @@ The entrypoint pins the device window to the top-left and hides the emulator
 toolbar/sidebar, so the browser view is exactly the 1080x2400 device screen.
 
 The worker runs on the host side (Android cannot run the linux/amd64 Go worker)
-and drives the guest over `adb`. Because the worker's job environment is a strict
-allowlist (only `PATH`/`HOME`/`TMPDIR`/`USER` and proxies survive), `ANDROID_HOME`
-never reaches a job — the image ships a global Gradle init script that writes
-`sdk.dir` into `local.properties`, so plain `gradle assembleDebug` works in jobs.
+and drives the guest over `adb`. Jobs inherit the worker's environment, so an
+`ANDROID_HOME` set on the worker reaches jobs as-is; the image additionally ships
+a global Gradle init script that writes `sdk.dir` into `local.properties`, so
+plain `gradle assembleDebug` works even when the env is not set.
 
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
