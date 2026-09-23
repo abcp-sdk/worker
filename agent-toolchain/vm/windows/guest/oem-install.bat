@@ -17,9 +17,15 @@ copy /y "C:\OEM\worker-launch.cmd" "%W%\worker-launch.cmd" >> "%LOG%" 2>&1
 copy /y "C:\OEM\ewelevate.cmd"     "%W%\ewelevate.cmd"     >> "%LOG%" 2>&1
 copy /y "C:\OEM\agent-worker.exe"  "%W%\agent-worker.exe"  >> "%LOG%" 2>&1
 
-rem Pre-authorize the worker in Windows Firewall (no allow-dialog at first run).
+rem Pre-authorize the worker in Windows Firewall. PORT-based: a program rule is
+rem re-prompted when the binary is replaced (boot-fetch), a port rule is not.
 netsh advfirewall firewall delete rule name="AgentWorker" >> "%LOG%" 2>&1
-netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow program="%W%\agent-worker.exe" protocol=tcp localport=48080 >> "%LOG%" 2>&1
+netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow protocol=TCP localport=48080 >> "%LOG%" 2>&1
+rem Also stop the interactive "allow" prompt for inbound apps.
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Windows" /v NoPopUpsOnBoot /t REG_DWORD /d 1 /f >> "%LOG%" 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" /v NotifyOnListen /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile" /v NotifyOnListen /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile" /v NotifyOnListen /t REG_DWORD /d 0 /f >> "%LOG%" 2>&1
 
 rem Register the AgentWorker task: Docker user, HIGHEST, interactive, at logon.
 schtasks /delete /tn AgentWorker /f >> "%LOG%" 2>&1

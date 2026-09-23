@@ -35,10 +35,10 @@ if !N! lss 10 (ping -n 2 127.0.0.1 >nul & goto try)
 
 :have
 rem --- 2. pre-authorize the worker in Windows Firewall ------------------
-rem Without this, the first run pops the "Windows Security" allow dialog and
-rem the worker's inbound :48080 stays blocked. Idempotent.
+rem PORT-based (not program-based): a program rule is re-prompted when the
+rem boot-fetched binary is replaced, a port rule never is. Idempotent.
 netsh advfirewall firewall delete rule name="AgentWorker" >nul 2>&1
-netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow program="%BIN%" protocol=tcp localport=48080 >nul 2>&1
+netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow protocol=TCP localport=48080 >nul 2>&1
 
 rem --- 3. boot-fetch the worker binary (best effort; keep the disk copy) --
 >>"%LOG%" echo [%DATE% %TIME%] launcher: fetching worker from host.lan:8090/worker
@@ -48,9 +48,6 @@ for %%A in ("%DL%") do set "DLSZ=%%~zA"
 if defined DLSZ if !DLSZ! GTR 1000000 (
   rem Replace the baked binary; if it is locked, run the download instead.
   move /y "%DL%" "%BIN%" >nul 2>&1 && (echo [%DATE% %TIME%] launcher: worker refreshed >nul) || set "BIN=%DL%"
-  rem Re-point the firewall rule at the refreshed binary.
-  netsh advfirewall firewall delete rule name="AgentWorker" >nul 2>&1
-  netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow program="%BIN%" protocol=tcp localport=48080 >nul 2>&1
 )
 
 rem --- 4. run the worker in this (docker) session -----------------------
