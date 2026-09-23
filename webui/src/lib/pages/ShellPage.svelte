@@ -40,33 +40,38 @@
       lines = []
       return
     }
-    const cd = cmd.match(/^cd(?:\s+(.+))?$/)
-    if (cd) {
-      await applyCd(cd[1])
-      return
-    }
+    // Lock the prompt for the whole command so nothing runs concurrently
+    // (serialized shell). Detach releases it early for long jobs; the job keeps
+    // running in the background.
+    running = true
+    const ac = new AbortController()
+    watchAbort = ac
     try {
+      const cd = cmd.match(/^cd(?:\s+(.+))?$/)
+      if (cd) {
+        await applyCd(cd[1])
+        return
+      }
       const r = await client().execute({ command: cmd, workdir: session.cwd || session.workspace })
-      running = true
-      const ac = new AbortController()
-      watchAbort = ac
       await watchJob(
         session.token,
         r.jobId,
         (ev) => {
           if (ev.output !== undefined) push('out', stripAnsi(ev.output))
-          if (ev.done) {
-            push('exit', `[done exit=${ev.done.exitCode}]`)
-            running = false
-          }
+          if (ev.done) push('exit', `[done exit=${ev.done.exitCode}]`)
         },
         ac.signal,
       )
     } catch (e) {
       if ((e as Error)?.name !== 'AbortError') push('err', `error: ${String((e as Error)?.message ?? e)}`)
     } finally {
-      running = false
-      watchAbort = null
+      // Only the CURRENT run may clear the lock/controller (a detached run's
+      // abort fires synchronously; guard against clobbering a newer run).
+      if (watchAbort === ac) {
+        watchAbort = null
+        running = false
+        queueMicrotask(() => inputEl?.focus())
+      }
     }
   }
 
@@ -85,6 +90,10 @@
   }
 
   function submit() {
+    // One command at a time: while a job streams, the input is disabled, so a
+    // second submit cannot race the first (which would overwrite watchAbort and
+    // interleave two jobs' output in the transcript).
+    if (running) return
     const cmd = command.trim()
     command = ''
     if (!cmd) return
@@ -115,9 +124,12 @@
   }
 
   function detach() {
+    // Stop streaming THIS command's output (history stays; no more lines are
+    // appended). The job itself keeps running in the background — watch or kill
+    // it from the Jobs drawer.
     if (watchAbort) {
       watchAbort.abort()
-      push('err', '[detached — job continues in the background]')
+      push('exit', '[detached — output stopped; job continues in the background]')
     }
   }
 </script>
@@ -151,8 +163,9 @@
       bind:this={inputEl}
       bind:value={command}
       onkeydown={onKey}
-      class="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-meta outline-none placeholder:text-muted-foreground"
-      placeholder="type a command, e.g. ls -la"
+      disabled={running}
+      class="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-meta outline-none placeholder:text-muted-foreground disabled:opacity-50"
+      placeholder={running ? 'running…' : 'type a command, e.g. ls -la'}
       autocomplete="off"
       spellcheck="false"
     />

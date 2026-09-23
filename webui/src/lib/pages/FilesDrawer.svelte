@@ -4,9 +4,10 @@
   // click on a directory ENTERS it (breadcrumb / ↑ go back). This is
   // deliberately decoupled from the shell's cwd: browsing here never moves the
   // shell. Drag-and-drop uploads files into the current directory.
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import { Button } from '$lib/components/ui/button'
   import { AppIcons } from '$lib/icons'
+  import { previewKind, mimeFor, type PreviewKind } from '$lib/file-types'
   import {
     client,
     session,
@@ -22,6 +23,10 @@
 
   let filePicker: HTMLInputElement | null = $state(null)
 
+  // Media previews load the whole file into one RPC/message; cap them so a
+  // huge file cannot blow up memory/transport. Larger files offer Download only.
+  const PREVIEW_MAX = 32 * 1024 * 1024
+
   interface Entry {
     path: string
     name: string
@@ -36,8 +41,12 @@
   let dragging = $state(false)
   let toast = $state('')
 
-  // editor
+  // editor / viewer
   let editing = $state<string | null>(null)
+  let editKind = $state<PreviewKind>('text')
+  let editSize = $state(0)
+  let mediaUrl = $state<string | null>(null)
+  let mediaTooBig = $state(false)
   let content = $state('')
   let saving = $state(false)
 
@@ -72,7 +81,7 @@
   /** Enter a directory (or open a file). */
   function activate(e: Entry) {
     if (e.isDir) void load(e.path)
-    else void openFile(e.path)
+    else void openFile(e.path, e.size)
   }
 
   /** Default location: the shell's cwd when it is inside the workspace, else
@@ -88,10 +97,32 @@
   // filesystem root (`/`, or `C:` on Windows). Clicking a crumb navigates.
   const crumbs = $derived(crumbsOf(dir))
 
-  async function openFile(path: string) {
+  function releaseMedia() {
+    if (mediaUrl) {
+      URL.revokeObjectURL(mediaUrl)
+      mediaUrl = null
+    }
+  }
+
+  async function openFile(path: string, size = 0) {
+    releaseMedia()
+    const kind = previewKind(path)
     editing = path
+    editKind = kind === 'none' ? 'text' : kind
+    editSize = size
+    mediaTooBig = false
     content = ''
     try {
+      // Media previews need the raw bytes (Blob URL); text is decoded.
+      if (kind === 'image' || kind === 'audio' || kind === 'video') {
+        if (size > PREVIEW_MAX) {
+          mediaTooBig = true
+          return
+        }
+        const r = await client().fileRead({ path })
+        mediaUrl = URL.createObjectURL(new Blob([r.content as BlobPart], { type: mimeFor(path) }))
+        return
+      }
       const r = await client().fileRead({ path })
       content = new TextDecoder('utf-8', { fatal: false }).decode(r.content)
     } catch (e) {
@@ -112,26 +143,29 @@
     saving = false
   }
 
+  function closeEditor() {
+    releaseMedia()
+    editing = null
+  }
+
   async function del() {
     if (editing === null || !confirm(`Delete ${editing}?`)) return
     try {
       await client().fileDelete({ path: editing })
-      editing = null
+      closeEditor()
       await load(dir)
     } catch (e) {
       say(String((e as Error)?.message ?? e))
     }
   }
 
-  function download() {
+  async function download() {
     if (editing === null) return
-    const bytes = new TextEncoder().encode(content)
-    const url = URL.createObjectURL(new Blob([bytes]))
     const a = document.createElement('a')
-    a.href = url
+    a.href = mediaUrl ?? URL.createObjectURL(new Blob([new TextEncoder().encode(content)]))
     a.download = basename(editing)
     a.click()
-    URL.revokeObjectURL(url)
+    if (!mediaUrl) URL.revokeObjectURL(a.href)
   }
 
   /** "New file" opens the OS file picker and uploads the chosen file(s) into
@@ -175,6 +209,8 @@
   onMount(() => {
     void load(defaultDir())
   })
+
+  onDestroy(releaseMedia)
 </script>
 
 <div
@@ -248,13 +284,15 @@
     </div>
   {:else}
     <div class="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
-      <Button variant="ghost" size="icon" title="Back to files" aria-label="Back" onclick={() => (editing = null)}>
+      <Button variant="ghost" size="icon" title="Back to files" aria-label="Back" onclick={closeEditor}>
         <AppIcons.back class="size-4" />
       </Button>
       <span class="min-w-0 flex-1 truncate px-1 font-mono text-micro" title={editing}>{displayPath(editing)}</span>
-      <Button variant="ghost" size="icon" title="Save" aria-label="Save" disabled={saving} onclick={save}>
-        <AppIcons.save class="size-4" />
-      </Button>
+      {#if editKind === 'text'}
+        <Button variant="ghost" size="icon" title="Save" aria-label="Save" disabled={saving} onclick={save}>
+          <AppIcons.save class="size-4" />
+        </Button>
+      {/if}
       <Button variant="ghost" size="icon" title="Download" aria-label="Download" onclick={download}>
         <AppIcons.download class="size-4" />
       </Button>
@@ -262,11 +300,37 @@
         <AppIcons.delete class="size-4" />
       </Button>
     </div>
-    <textarea
-      bind:value={content}
-      class="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent p-3 font-mono text-meta outline-none"
-      spellcheck="false"
-    ></textarea>
+    {#if editKind === 'text'}
+      <textarea
+        bind:value={content}
+        class="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent p-3 font-mono text-meta outline-none"
+        spellcheck="false"
+      ></textarea>
+    {:else if mediaTooBig}
+      <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
+        <AppIcons.file class="size-8 text-muted-foreground" />
+        <p class="text-meta text-muted-foreground">
+          {fmtSize(editSize)} is too large to preview (limit {fmtSize(PREVIEW_MAX)}).
+        </p>
+        <Button variant="secondary" size="sm" onclick={download}>
+          <AppIcons.download class="size-4" /> Download
+        </Button>
+      </div>
+    {:else if mediaUrl && editKind === 'image'}
+      <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/30 p-3">
+        <img src={mediaUrl} alt={basename(editing)} class="max-h-full max-w-full object-contain" />
+      </div>
+    {:else if mediaUrl && editKind === 'video'}
+      <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/90 p-2">
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video src={mediaUrl} controls class="max-h-full max-w-full"></video>
+      </div>
+    {:else if mediaUrl && editKind === 'audio'}
+      <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4">
+        <AppIcons.file class="size-8 text-muted-foreground" />
+        <audio src={mediaUrl} controls class="w-full max-w-sm"></audio>
+      </div>
+    {/if}
   {/if}
 
   {#if dragging}
