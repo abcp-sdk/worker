@@ -1,0 +1,72 @@
+# agent-worker desktop sandbox — PURE X11 flavor (openbox).
+#
+# A self-contained, run-only graphical sandbox: a virtual X server, a lightweight
+# window manager, a browser-viewable screen (noVNC), and the agent-worker binary.
+# No language toolchain beyond what the base already carries (it is built FROM
+# agent-toolchain/toolchain-base, so build-essential etc. are present).
+#
+# Screen stack:
+#   Xvfb :99  ->  openbox  ->  x11vnc :5900  ->  websockify :6080 (noVNC)
+#
+# This is the flavor to use when jobs must DRIVE X11 applications (e.g.
+# xdotool/xclip automation): those tools are X11-only and cannot target Wayland
+# clients. For a native Wayland desktop use the `labwc` flavor instead.
+#
+# The base image's CMD (`bash`) is replaced by this entrypoint, which starts the
+# whole stack plus agent-worker. The gateway's derive-on-launch path is NOT used
+# for this image (that path forces agent-worker as the sole ENTRYPOINT and would
+# never start the desktop); deploy it as a plain Deployment instead
+# (see k8s/agent-worker-desktop.yaml).
+ARG BASE_IMAGE=git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,.nip.io,10.199.64.20 \
+    DEBIAN_FRONTEND=noninteractive
+
+# X11 display stack + the browser screen client + GUI runtime libraries a
+# desktop app (Qt/GTK/WebEngine) expects. The official Debian sources are
+# already configured in the base; the build runs through the proxy.
+RUN set -eux; \
+    apt-get -o Acquire::Retries=10 update; \
+    for i in 1 2 3 4 5 6; do \
+      apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+        tini xvfb x11vnc openbox xterm x11-utils \
+        xdotool xclip xsel \
+        novnc websockify \
+        fonts-dejavu fonts-noto-cjk \
+        libgbm1 libxkbcommon0 libnss3 libgtk-3-0t64 \
+        libasound2t64 libpulse0 libx11-6 libxcb1 libxrender1 libxtst6 \
+        libxi6 libxcursor1 libxrandr2 libxcomposite1 libxdamage1 \
+        libxfixes3 libxext6 \
+      && break || { echo "apt retry $i"; sleep 3; }; \
+    done; \
+    rm -rf /var/lib/apt/lists/*
+
+# agent-worker (placed in the build context by build.sh from dist/).
+COPY --chmod=755 ./agent-worker /usr/local/bin/agent-worker
+
+# Minimal openbox config: a single workspace, no desktop clutter. An xterm is
+# started by the entrypoint (not autostart) so the log ordering stays simple.
+RUN mkdir -p /root/.config/openbox && \
+    printf '%s\n' \
+      '<openbox_config xmlns="http://openbox.org/3.4/rc">' \
+      '  <desktops><number>1</number></desktops>' \
+      '  <theme><name>Clearlooks</name></theme>' \
+      '</openbox_config>' \
+      > /root/.config/openbox/rc.xml
+
+COPY --chmod=755 ./entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN mkdir -p /workspace
+
+ENV WORKER_PORT=48080 \
+    WORKER_WORKSPACE=/workspace \
+    WORKER_DB=/data/jobs.db \
+    DISPLAY=:99 \
+    SCREEN_GEOMETRY=1280x720x24
+
+EXPOSE 48080 6080
+ENTRYPOINT ["/usr/bin/tini", "-s", "/usr/local/bin/entrypoint.sh"]

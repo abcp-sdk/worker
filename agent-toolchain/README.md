@@ -33,6 +33,7 @@ cache/debian-trixie/      pre-downloaded upstream artifacts (GITIGNORED, multi-G
 vm/macos/                 macOS (Sequoia) VM sandbox image + build/repack + guest/
 vm/windows/               Windows 11 VM sandbox image + build/repack + guest/
 android/                  Android emulator sandbox image (run-only) + screen bridge
+desktop/                  graphical desktop sandbox (openbox=pure X11 / labwc=pure Wayland) + noVNC
 ```
 
 ## VM / Android sandboxes
@@ -49,6 +50,7 @@ update.
 | `vm/macos/`   | `base`, `xcode`      | macOS 15 Sequoia |
 | `vm/windows/` | `base`, `devtools`   | Windows 11 (devtools = MSVC + Windows SDK + .NET) |
 | `android/`    | `aosp`, `gms`        | official Android emulator, run-only |
+| `desktop/`    | `openbox`, `labwc`   | toolchain-base; X11 or Wayland desktop + noVNC, run-only |
 
 ```sh
 scripts/build-all.sh                      # dist/agent-worker-* (all platforms)
@@ -58,6 +60,8 @@ scripts/build-all.sh                      # dist/agent-worker-* (all platforms)
 ./agent-toolchain/vm/windows/build.sh devtools
 ./agent-toolchain/android/build.sh aosp
 ./agent-toolchain/android/build.sh gms
+./agent-toolchain/desktop/build.sh openbox
+./agent-toolchain/desktop/build.sh labwc
 ```
 
 Guest disks and boot support files are staged (git-ignored) under each

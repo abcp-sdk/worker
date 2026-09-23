@@ -1,0 +1,76 @@
+# agent-worker desktop sandbox — PURE Wayland flavor (labwc + wayvnc).
+#
+# A self-contained, run-only graphical sandbox: a headless Wayland compositor,
+# a browser-viewable screen (noVNC), and the agent-worker binary. Built FROM
+# agent-toolchain/toolchain-base, so the base build tools are present.
+#
+# Screen stack:
+#   labwc (headless)  ->  wayvnc :5900  ->  websockify :6080 (noVNC)
+#
+# Use this flavor for native Wayland clients. Note that X11-only automation
+# tools (xdotool/xclip) CANNOT target Wayland clients — for that use the
+# `openbox` flavor instead.
+#
+# The base image's CMD (`bash`) is replaced by this entrypoint, which starts the
+# whole stack plus agent-worker. The gateway's derive-on-launch path is NOT used
+# for this image (that path forces agent-worker as the sole ENTRYPOINT and would
+# never start the desktop); deploy it as a plain Deployment instead
+# (see k8s/agent-worker-desktop.yaml).
+ARG BASE_IMAGE=git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie
+FROM ${BASE_IMAGE}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,.nip.io,10.199.64.20 \
+    DEBIAN_FRONTEND=noninteractive
+
+# Wayland compositor + VNC + the browser screen client + GUI runtime libraries
+# a Wayland/GTK/Qt client expects.
+RUN set -eux; \
+    apt-get -o Acquire::Retries=10 update; \
+    for i in 1 2 3 4 5 6; do \
+      apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+        tini labwc wayvnc foot \
+        novnc websockify \
+        fonts-dejavu fonts-noto-cjk \
+        libgbm1 libxkbcommon0 libnss3 libgtk-3-0t64 \
+        libasound2t64 libpulse0 libx11-6 libxcb1 libxrender1 libxtst6 \
+        libxi6 libxcursor1 libxrandr2 libxcomposite1 libxdamage1 \
+        libxfixes3 libxext6 \
+      && break || { echo "apt retry $i"; sleep 3; }; \
+    done; \
+    rm -rf /var/lib/apt/lists/*
+
+# agent-worker (placed in the build context by build.sh from dist/).
+COPY --chmod=755 ./agent-worker /usr/local/bin/agent-worker
+
+# Minimal labwc config: US layout, a single headless output. foot is started by
+# the entrypoint (not autostart) so log ordering stays simple.
+RUN mkdir -p /root/.config/labwc && \
+    printf '%s\n' \
+      '[core]' \
+      '    xkb-layout=us' \
+      '' \
+      '[output:wlshm]' \
+      '    scale=1.0' \
+      > /root/.config/labwc/rc.xml && \
+    printf '%s\n' \
+      'QT_QPA_PLATFORM=wayland' \
+      'GDK_BACKEND=wayland' \
+      'LANG=C.UTF-8' \
+      > /root/.config/labwc/environment
+
+COPY --chmod=755 ./entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN mkdir -p /workspace
+
+ENV WORKER_PORT=48080 \
+    WORKER_WORKSPACE=/workspace \
+    WORKER_DB=/data/jobs.db \
+    WAYLAND_DISPLAY=wayland-0 \
+    XDG_RUNTIME_DIR=/tmp/xdg \
+    SCREEN_GEOMETRY=1280x720
+
+EXPOSE 48080 6080
+ENTRYPOINT ["/usr/bin/tini", "-s", "/usr/local/bin/entrypoint.sh"]
