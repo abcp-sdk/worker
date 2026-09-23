@@ -16,7 +16,7 @@ set -Eeuo pipefail
 WROOT=/Users/docker
 BIN="$WROOT/agent-worker-darwin"
 DL="$WROOT/agent-worker-darwin.dl"
-WS="$WROOT/ws"
+WS="$WROOT/ewws"
 
 TOKEN=""
 for _ in $(seq 1 60); do
@@ -41,6 +41,13 @@ if curl -s -m 30 -o "$DL" http://host.lan:8090/worker 2>/dev/null; then
   fi
 fi
 [ -x "$BIN" ] || BIN="$WROOT/agent-worker-v0.5.2"
+
+# The daemon path runs as root; hand the workspace + binaries to docker so the
+# worker (which runs as docker) can write its sqlite DB.
+if [ "$(id -un)" = "root" ]; then
+  chown -R docker:staff "$WS" 2>/dev/null || true
+  chown docker:staff "$BIN" 2>/dev/null || true
+fi
 
 # Agent path: already inside docker's Aqua session.
 if [ "$(id -un)" = "docker" ]; then

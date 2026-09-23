@@ -62,6 +62,15 @@ netsh advfirewall firewall set rule group="@FirewallAPI.dll,-32752" new enable=Y
 rem Enable File Sharing.
 netsh advfirewall firewall set rule group="@FirewallAPI.dll,-28502" new enable=Yes
 
+rem agent-worker: turn the firewall OFF. The sandbox is single-tenant and only
+rem reachable over the pod's private QEMU user-net, and a per-program rule is
+rem re-prompted whenever the boot-fetched worker binary is replaced (which
+rem would block the worker behind a modal "Windows Security" dialog).
+netsh advfirewall set allprofiles state off
+reg.exe add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" /v EnableFirewall /t REG_DWORD /d 0 /f
+reg.exe add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile" /v EnableFirewall /t REG_DWORD /d 0 /f
+reg.exe add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile" /v EnableFirewall /t REG_DWORD /d 0 /f
+
 rem Remove the empty Windows.old folder.
 if exist "%SystemDrive%\Windows.old" rd /q "%SystemDrive%\Windows.old"
 
