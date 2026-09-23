@@ -7,7 +7,12 @@ worker modifications. It is the abcp-sdk-owned source of the worker binary:
   `worker`), and
 - the workspace gateway injects the SAME binary into arbitrary sandbox base
   images at launch (derive-on-launch); the gateway vendors a byte-identical
-  copy under `workspace-gateway/images/worker-src`.
+  copy under `workspace-gateway/worker-src`.
+
+This repo also owns the **`agent-toolchain`** image catalog
+(`agent-toolchain/`): the generic language dev images pushed to the registry's
+`agent-toolchain` namespace, used as sandbox bases / service images. See
+`agent-toolchain/README.md`.
 
 Fork deltas relative to upstream (`easylab-platform/easyworker@e6e069d`):
 

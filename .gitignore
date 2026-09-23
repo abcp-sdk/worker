@@ -4,6 +4,10 @@
 /worker-bin/
 .last-image
 
+# agent-toolchain: multi-GB pre-downloaded build artifacts (rebuilt by
+# agent-toolchain/build-toolchain.sh -> fetch-artifacts.sh); never committed.
+/agent-toolchain/cache/
+
 # go
 go.work.sum
 *.db
