@@ -1,0 +1,120 @@
+# easyworker on macOS 15 (Sequoia) — a non-privileged VM sandbox worker.
+#
+# Same shape as k8s/easyworker-windows.yaml: a pre-baked macOS image whose guest
+# runs the easyworker binary, with KVM delivered by the generic-device-plugin
+# (extended resource squat.ai/kvm) while the pod stays privileged: false.
+#
+# Image variants on the same base (see readme):
+#   v1.3.0-basic    macOS 15 only (no developer toolchain)
+#   v1.3.0-xcode    + Xcode 26.3 / Swift 6.2.4
+#   v1.3.0-cmp      + Xcode + JDK 17 / Gradle / Kotlin / Compose Multiplatform
+#   v1.3.0-flutter  + Xcode + Flutter 3.47.4 (Swift Package Manager)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: easyworker-macos
+  namespace: temp
+  labels:
+    app: easyworker-macos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: easyworker-macos
+  template:
+    metadata:
+      labels:
+        app: easyworker-macos
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: <node-name>
+      # Only needed if the image comes from a private registry.
+      imagePullSecrets:
+        - name: <registry-credentials>
+      containers:
+        - name: macos
+          image: <registry>/vm-images/easyworker-macos:v1.3.0-basic
+          imagePullPolicy: IfNotPresent
+
+          securityContext:
+            privileged: false
+            runAsUser: 0
+            allowPrivilegeEscalation: true
+            seccompProfile: { type: Unconfined }
+            appArmorProfile: { type: Unconfined }
+            capabilities:
+              add: ["NET_ADMIN","NET_RAW","SYS_ADMIN","SYS_NICE","MKNOD",
+                    "CHOWN","SETUID","SETGID","DAC_OVERRIDE","FOWNER","KILL"]
+
+          ports:
+            - { name: web, containerPort: 8006 }
+            - { name: worker, containerPort: 48080 }
+
+          env:
+            # Non-empty => the guest worker starts pre-authorized (no claim).
+            - { name: WORKER_TOKEN, value: "" }
+            - { name: VERSION, value: "15" }
+            # macOS wants a power-of-two vCPU count (2/4/8/16/...).
+            # 4 is the stable default for Sequoia on x86_64 KVM hosts.
+            - { name: CPU_CORES, value: "4" }
+            - { name: RAM_SIZE, value: "16384M" }
+            - { name: DISK_SIZE, value: "128G" }    # >= baked disk size
+            - { name: MANUAL, value: "N" }
+
+          resources:
+            requests: { cpu: "4", memory: "16Gi" }
+            limits:
+              cpu: "4"
+              memory: "20Gi"
+              squat.ai/kvm: "1"        # <- the KVM device request
+
+          volumeMounts:
+            - { name: devtun, mountPath: /dev/net/tun }
+      volumes:
+        - name: devtun
+          hostPath: { path: /dev/net/tun, type: CharDevice }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: easyworker-macos
+  namespace: temp
+  labels:
+    app: easyworker-macos
+spec:
+  selector:
+    app: easyworker-macos
+  ports:
+    - { name: http, port: 80, targetPort: 48080 }
+    - { name: worker, port: 48080, targetPort: 48080 }
+  type: ClusterIP
+---
+# SSH into the guest (read the enrollment code from /Users/docker/ewws/jobs.db).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssh-easyworker-macos
+  namespace: temp
+  labels:
+    app: easyworker-macos
+spec:
+  selector:
+    app: easyworker-macos
+  ports:
+    - { name: ssh, port: 22, targetPort: 22 }
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: easyworker-macos-novnc
+  namespace: temp
+  labels:
+    app: easyworker-macos
+spec:
+  selector:
+    app: easyworker-macos
+  ports:
+    - { name: web, port: 80, targetPort: 8006 }
+  type: ClusterIP
