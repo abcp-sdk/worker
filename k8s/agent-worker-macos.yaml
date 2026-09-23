@@ -34,7 +34,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: macos
-          image: <registry>/vm-images/agent-worker-macos:v1.3.0-basic
+          image: <registry>/agent-toolchain/agent-worker-macos:v0.1.0-base
           imagePullPolicy: IfNotPresent
 
           securityContext:

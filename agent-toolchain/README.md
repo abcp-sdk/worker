@@ -30,7 +30,40 @@ middleware.Dockerfile     no-op FROM re-serve used by mirror-images.sh
 middleware.env            pinned shared middleware image refs
 toolchain/debian-trixie/  per-language Dockerfiles (+ base.Dockerfile, urls.env)
 cache/debian-trixie/      pre-downloaded upstream artifacts (GITIGNORED, multi-GB)
+vm/macos/                 macOS (Sequoia) VM sandbox image + build/repack + guest/
+vm/windows/               Windows 11 VM sandbox image + build/repack + guest/
+android/                  Android emulator sandbox image (run-only) + screen bridge
 ```
+
+## VM / Android sandboxes
+
+`vm/` and `android/` hold the non-linux sandbox images: a pre-baked guest disk
+wrapped in a self-owned runtime (generic `qemux/qemu:750` + vendored boot
+scripts). The worker binary is **boot-fetched** by the guest from the
+container's nginx (`http://host.lan:8090/worker`) on every start, so a worker
+upgrade is an image rebuild — the golden disk only needs a one-time launcher
+update.
+
+| dir | variants | base |
+|---|---|---|
+| `vm/macos/`   | `base`, `xcode`      | macOS 15 Sequoia |
+| `vm/windows/` | `base`, `devtools`   | Windows 11 (devtools = MSVC + Windows SDK + .NET) |
+| `android/`    | `aosp`, `gms`        | official Android emulator, run-only |
+
+```sh
+scripts/build-all.sh                      # dist/agent-worker-* (all platforms)
+./agent-toolchain/vm/macos/build.sh base
+./agent-toolchain/vm/macos/build.sh xcode
+./agent-toolchain/vm/windows/build.sh base
+./agent-toolchain/vm/windows/build.sh devtools
+./agent-toolchain/android/build.sh aosp
+./agent-toolchain/android/build.sh gms
+```
+
+Guest disks and boot support files are staged (git-ignored) under each
+variant's `disk/` (macOS) or `disk/` + `disk-support/` (Windows); see the
+per-tree `README.md`.
+
 
 ## Build
 

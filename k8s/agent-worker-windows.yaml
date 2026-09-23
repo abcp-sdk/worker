@@ -35,7 +35,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: windows
-          image: <registry>/vm-images/agent-worker-windows:v1.2.1
+          image: <registry>/agent-toolchain/agent-worker-windows:v0.1.0-devtools
           imagePullPolicy: IfNotPresent
 
           # NOT privileged. KVM is delivered by the device plugin: requesting

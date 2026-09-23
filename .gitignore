@@ -18,3 +18,10 @@ go.work.sum
 *.swp
 .idea/
 .vscode/
+
+# agent-toolchain VM/Android staged guest disks + boot support (multi-GB).
+/agent-toolchain/vm/macos/base/
+/agent-toolchain/vm/macos/xcode/
+/agent-toolchain/vm/windows/base/
+/agent-toolchain/vm/windows/devtools/
+/agent-toolchain/vm/*/repack-*/
