@@ -1,26 +1,36 @@
 <script lang="ts">
-  // FilesDrawer — browse/edit the worker filesystem (unconfined). A lazy tree
-  // expands directories IN PLACE (children inserted, not a full re-list); a
-  // breadcrumb navigates; drag-and-drop uploads FILES into the current dir.
+  // FilesDrawer — a Finder/Explorer-style browser over the worker filesystem
+  // (unconfined). The list shows the CURRENT directory's direct children; a
+  // click on a directory ENTERS it (breadcrumb / ↑ go back). This is
+  // deliberately decoupled from the shell's cwd: browsing here never moves the
+  // shell. Drag-and-drop uploads files into the current directory.
   import { onMount } from 'svelte'
   import { Button } from '$lib/components/ui/button'
-  import { Input } from '$lib/components/ui/input'
-  import { client, session, normAbs, absOf, basename, fmtSize } from '$lib/session.svelte'
+  import { AppIcons } from '$lib/icons'
+  import {
+    client,
+    session,
+    normAbs,
+    absOf,
+    basename,
+    displayPath,
+    crumbsOf,
+    fmtSize,
+  } from '$lib/session.svelte'
 
   let { onClose }: { onClose: () => void } = $props()
 
-  interface Node {
+  let filePicker: HTMLInputElement | null = $state(null)
+
+  interface Entry {
     path: string
     name: string
     isDir: boolean
     size: number
-    /** Children once expanded (null = not yet listed). */
-    children: Node[] | null
-    open: boolean
   }
 
-  let root = $state('')
-  let nodes = $state<Node[]>([])
+  let dir = $state('')
+  let entries = $state<Entry[]>([])
   let loading = $state(false)
   let err = $state('')
   let dragging = $state(false)
@@ -36,65 +46,47 @@
     setTimeout(() => (toast = ''), 2500)
   }
 
-  function toNode(f: { path: string; size: number | bigint; isDir: boolean }): Node {
-    const abs = absOf(f.path)
-    return { path: abs, name: basename(abs), isDir: f.isDir, size: Number(f.size), children: null, open: false }
+  async function listDir(d: string): Promise<Entry[]> {
+    const r = await client().fileList({ path: d, depth: 1, limit: 2000 })
+    return (r.files ?? [])
+      .map(f => {
+        const abs = absOf(f.path)
+        return { path: abs, name: basename(abs), isDir: f.isDir, size: Number(f.size) }
+      })
+      .sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
   }
 
-  async function listDir(dir: string): Promise<Node[]> {
-    const r = await client().fileList({ path: dir, depth: 1, limit: 2000 })
-    return (r.files ?? []).map(toNode).sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1))
-  }
-
-  async function loadRoot() {
-    root = session.cwd || session.workspace || '/'
+  async function load(d: string) {
+    dir = normAbs(d)
     loading = true
     err = ''
     try {
-      nodes = await listDir(root)
+      entries = await listDir(dir)
     } catch (e) {
       err = String((e as Error)?.message ?? e)
+      entries = []
     }
     loading = false
   }
 
-  async function toggle(n: Node) {
-    if (!n.isDir) {
-      void openFile(n.path)
-      return
-    }
-    if (n.open) {
-      n.open = false
-      return
-    }
-    if (n.children === null) {
-      try {
-        n.children = await listDir(n.path)
-      } catch (e) {
-        say(String((e as Error)?.message ?? e))
-        return
-      }
-    }
-    n.open = true
+  /** Enter a directory (or open a file). */
+  function activate(e: Entry) {
+    if (e.isDir) void load(e.path)
+    else void openFile(e.path)
   }
 
-  async function navigate(dir: string) {
-    session.cwd = normAbs(dir)
-    await loadRoot()
+  /** Default location: the shell's cwd when it is inside the workspace, else
+   *  the workspace root. (Read-only — does NOT change the shell.) */
+  function defaultDir(): string {
+    const ws = session.workspace || '/'
+    const c = session.cwd
+    if (c && (c === ws || c.startsWith(ws + '/'))) return c
+    return ws
   }
 
-  const crumbs = $derived(
-    (() => {
-      const parts = root.split('/').filter(Boolean)
-      const out: { name: string; path: string }[] = [{ name: '/', path: '/' }]
-      let acc = ''
-      for (const p of parts) {
-        acc += '/' + p
-        out.push({ name: p, path: acc })
-      }
-      return out
-    })(),
-  )
+  // Breadcrumb anchored on `~` (the workspace) when inside it, else the
+  // filesystem root (`/`, or `C:` on Windows). Clicking a crumb navigates.
+  const crumbs = $derived(crumbsOf(dir))
 
   async function openFile(path: string) {
     editing = path
@@ -125,7 +117,7 @@
     try {
       await client().fileDelete({ path: editing })
       editing = null
-      await loadRoot()
+      await load(dir)
     } catch (e) {
       say(String((e as Error)?.message ?? e))
     }
@@ -142,22 +134,27 @@
     URL.revokeObjectURL(url)
   }
 
-  async function newFile() {
-    const name = prompt(`new file path (absolute, or relative to ${root})`)
-    if (!name) return
-    const abs = name.startsWith('/') ? normAbs(name) : normAbs(root + '/' + name)
-    editing = abs
-    content = ''
+  /** "New file" opens the OS file picker and uploads the chosen file(s) into
+   *  the current directory (same path as drag-drop), rather than asking for a
+   *  name. */
+  function newFile() {
+    filePicker?.click()
   }
 
-  // ---- drag & drop upload (files only) ----
+  function onPick(e: Event) {
+    const input = e.currentTarget as HTMLInputElement
+    const files = Array.from(input.files ?? [])
+    input.value = ''
+    void uploadFiles(files)
+  }
+
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return
     let ok = 0
     for (const f of files) {
       try {
         const buf = new Uint8Array(await f.arrayBuffer())
-        await client().fileWrite({ path: normAbs(root + '/' + f.name), content: buf })
+        await client().fileWrite({ path: normAbs(dir + '/' + f.name), content: buf })
         ok++
       } catch (e) {
         say(`upload ${f.name}: ${String((e as Error)?.message ?? e)}`)
@@ -165,19 +162,18 @@
     }
     if (ok > 0) {
       say(`uploaded ${ok} file(s)`)
-      await loadRoot()
+      await load(dir)
     }
   }
 
   function onDrop(e: DragEvent) {
     e.preventDefault()
     dragging = false
-    const files = Array.from(e.dataTransfer?.files ?? [])
-    void uploadFiles(files)
+    void uploadFiles(Array.from(e.dataTransfer?.files ?? []))
   }
 
   onMount(() => {
-    void loadRoot()
+    void load(defaultDir())
   })
 </script>
 
@@ -192,58 +188,79 @@
   ondrop={onDrop}
 >
   {#if editing === null}
-    <div class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
-      <Button variant="ghost" size="sm" title="up one level" onclick={() => navigate(normAbs(root + '/..'))}>↑</Button>
-      <Button variant="ghost" size="sm" title="workspace root" onclick={() => navigate(session.workspace || '/')}>⌂</Button>
-      <Button variant="ghost" size="sm" onclick={newFile}>New</Button>
-      <Button variant="ghost" size="sm" class="ml-auto" onclick={onClose}>×</Button>
+    <div class="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
+      <Button variant="ghost" size="icon" title="Back (up one level)" aria-label="Back" onclick={() => load(normAbs(dir + '/..'))}>
+        <AppIcons.back class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" title="Workspace (~)" aria-label="Workspace" onclick={() => load(session.workspace || '/')}>
+        <AppIcons.home class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" title="Locate the shell's directory" aria-label="Locate" onclick={() => load(defaultDir())}>
+        <AppIcons.locate class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" title="Upload file(s) here" aria-label="Upload" onclick={newFile}>
+        <AppIcons.upload class="size-4" />
+      </Button>
+      <input bind:this={filePicker} type="file" multiple class="hidden" onchange={onPick} />
+      <span class="ml-auto"></span>
+      <Button variant="ghost" size="icon" title="Refresh" aria-label="Refresh" onclick={() => load(dir)}>
+        <AppIcons.refresh class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" title="Close" aria-label="Close" onclick={onClose}>
+        <AppIcons.close class="size-4" />
+      </Button>
     </div>
+
     <div class="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1 font-mono text-micro text-muted-foreground">
       {#each crumbs as c, i (c.path)}
-        {#if i > 0}<span>/</span>{/if}
-        <button type="button" class="rounded px-1 hover:bg-muted hover:text-foreground" onclick={() => navigate(c.path)}>
-          {c.name === '/' ? 'root' : c.name}
+        {#if i > 0}<AppIcons.chevronRight class="size-3 shrink-0 opacity-50" />{/if}
+        <button type="button" class="rounded px-1 hover:bg-muted hover:text-foreground" onclick={() => load(c.path)}>
+          {c.name}
         </button>
       {/each}
     </div>
 
-    <div class="min-h-0 flex-1 overflow-auto p-1.5 font-mono text-meta">
+    <div class="min-h-0 flex-1 overflow-auto p-1">
       {#if loading}
-        <p class="p-2 text-muted-foreground">loading…</p>
+        <p class="p-2 text-meta text-muted-foreground">loading…</p>
       {:else if err}
-        <p class="p-2 text-destructive">{err}</p>
-      {:else if nodes.length === 0}
-        <p class="p-2 text-muted-foreground">empty — drop files here to upload</p>
+        <p class="p-2 text-meta text-destructive">{err}</p>
+      {:else if entries.length === 0}
+        <p class="p-2 text-meta text-muted-foreground">empty — drop files here to upload</p>
       {:else}
-        {#snippet tree(list: Node[], depth: number)}
-          {#each list as n (n.path)}
-            <button
-              type="button"
-              class="flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left hover:bg-muted {n.isDir
-                ? 'text-primary'
-                : ''}"
-              style="padding-left: {6 + depth * 14}px"
-              onclick={() => toggle(n)}
-            >
-              <span class="w-3 shrink-0 text-muted-foreground">{n.isDir ? (n.open ? '▾' : '▸') : ''}</span>
-              <span class="min-w-0 flex-1 truncate">{n.name}</span>
-              <span class="shrink-0 text-micro text-muted-foreground">{n.isDir ? '' : fmtSize(n.size)}</span>
-            </button>
-            {#if n.isDir && n.open && n.children}
-              {@render tree(n.children, depth + 1)}
+        {#each entries as e (e.path)}
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-meta hover:bg-muted"
+            onclick={() => activate(e)}
+          >
+            {#if e.isDir}
+              <AppIcons.folder class="size-4 shrink-0 text-primary" />
+            {:else}
+              <AppIcons.file class="size-4 shrink-0 text-muted-foreground" />
             {/if}
-          {/each}
-        {/snippet}
-        {@render tree(nodes, 0)}
+            <span class="min-w-0 flex-1 truncate">{e.name}</span>
+            <span class="shrink-0 text-micro text-muted-foreground">{e.isDir ? '' : fmtSize(e.size)}</span>
+            {#if e.isDir}<AppIcons.chevronRight class="size-3.5 shrink-0 text-muted-foreground" />{/if}
+          </button>
+        {/each}
       {/if}
     </div>
   {:else}
-    <div class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
-      <span class="min-w-0 flex-1 truncate font-mono text-micro">{editing}</span>
-      <Button variant="ghost" size="sm" disabled={saving} onclick={save}>Save</Button>
-      <Button variant="ghost" size="sm" onclick={download}>Download</Button>
-      <Button variant="ghost" size="sm" class="text-destructive" onclick={del}>Delete</Button>
-      <Button variant="ghost" size="sm" onclick={() => (editing = null)}>Back</Button>
+    <div class="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
+      <Button variant="ghost" size="icon" title="Back to files" aria-label="Back" onclick={() => (editing = null)}>
+        <AppIcons.back class="size-4" />
+      </Button>
+      <span class="min-w-0 flex-1 truncate px-1 font-mono text-micro" title={editing}>{displayPath(editing)}</span>
+      <Button variant="ghost" size="icon" title="Save" aria-label="Save" disabled={saving} onclick={save}>
+        <AppIcons.save class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" title="Download" aria-label="Download" onclick={download}>
+        <AppIcons.download class="size-4" />
+      </Button>
+      <Button variant="ghost" size="icon" class="text-destructive" title="Delete" aria-label="Delete" onclick={del}>
+        <AppIcons.delete class="size-4" />
+      </Button>
     </div>
     <textarea
       bind:value={content}

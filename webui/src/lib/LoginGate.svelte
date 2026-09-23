@@ -6,7 +6,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
-  import { session, setToken, client } from '$lib/session.svelte'
+  import { session, setToken, client, applyInfo } from '$lib/session.svelte'
   import { createEnrollClient } from '$lib/worker'
 
   let { onEnter }: { onEnter: () => void } = $props()
@@ -21,10 +21,7 @@
     setToken(tok)
     try {
       const i = await client().info({})
-      session.workspace = i.workspace || '/'
-      session.os = i.os
-      session.arch = i.arch
-      session.bootId = i.bootId
+      applyInfo(i)
       session.connected = true
       if (!session.cwd) session.cwd = session.workspace
       return true

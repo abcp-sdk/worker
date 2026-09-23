@@ -4,6 +4,7 @@
   // so the command never overflows the screen.
   import { onMount } from 'svelte'
   import { Button } from '$lib/components/ui/button'
+  import { AppIcons } from '$lib/icons'
   import { client, session, stripAnsi } from '$lib/session.svelte'
   import { watchJob } from '$lib/worker'
 
@@ -117,7 +118,11 @@
 
 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
   <div class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
-    {#if viewId}<Button variant="ghost" size="sm" onclick={back}>← Jobs</Button>{/if}
+    {#if viewId}
+      <Button variant="ghost" size="icon" title="Back to jobs" aria-label="Back" onclick={back}>
+        <AppIcons.back class="size-4" />
+      </Button>
+    {/if}
     <span class="text-meta font-semibold">{viewId ? 'Output' : 'Jobs'}</span>
     <span class="ml-auto"></span>
     {#if viewId}
@@ -130,11 +135,17 @@
         <option value="stdout">stdout</option>
         <option value="stderr">stderr</option>
       </select>
-      <Button variant="ghost" size="sm" onclick={reload}>Refresh</Button>
+      <Button variant="ghost" size="icon" title="Refresh" aria-label="Refresh" onclick={reload}>
+        <AppIcons.refresh class="size-4" />
+      </Button>
     {:else}
-      <Button variant="ghost" size="sm" onclick={load}>Refresh</Button>
+      <Button variant="ghost" size="icon" title="Refresh" aria-label="Refresh" onclick={load}>
+        <AppIcons.refresh class="size-4" />
+      </Button>
     {/if}
-    <Button variant="ghost" size="sm" onclick={onClose}>×</Button>
+    <Button variant="ghost" size="icon" title="Close" aria-label="Close" onclick={onClose}>
+      <AppIcons.close class="size-4" />
+    </Button>
   </div>
 
   {#if viewId}
@@ -150,8 +161,12 @@
       <span>{viewLines.length} / {viewTotal} lines {viewDone ? '· done' : '· running'}</span>
       <span class="ml-auto"></span>
       {#if !viewDone}
-        <Button variant="ghost" size="sm" onclick={() => watch(viewId!)}>Watch live</Button>
-        <Button variant="ghost" size="sm" class="text-destructive" onclick={() => kill(viewId!)}>Kill</Button>
+        <Button variant="ghost" size="sm" title="Stream live output" onclick={() => watch(viewId!)}>
+          <AppIcons.watch class="size-4" />Watch
+        </Button>
+        <Button variant="ghost" size="sm" class="text-destructive" title="Kill the job" onclick={() => kill(viewId!)}>
+          <AppIcons.kill class="size-4" />Kill
+        </Button>
       {/if}
       {#if viewLines.length < viewTotal}
         <Button variant="ghost" size="sm" onclick={() => view(viewId!, viewLines.length)}>Load more</Button>
@@ -175,9 +190,15 @@
               </div>
               <p class="mt-1 font-mono text-micro break-all whitespace-pre-wrap">{j.command}</p>
               <div class="mt-1.5 flex gap-1">
-                <Button variant="outline" size="sm" onclick={() => view(j.id)}>View</Button>
-                <Button variant="outline" size="sm" onclick={() => watch(j.id)}>Watch</Button>
-                {#if j.state === 'running'}<Button variant="outline" size="sm" class="text-destructive" onclick={() => kill(j.id)}>Kill</Button>{/if}
+                <Button variant="outline" size="sm" title="View output" onclick={() => view(j.id)}>
+                  <AppIcons.view class="size-4" />View
+                </Button>
+                <Button variant="outline" size="sm" title="Stream live output" onclick={() => watch(j.id)}>
+                  <AppIcons.watch class="size-4" />Watch
+                </Button>
+                {#if j.state === 'running'}<Button variant="outline" size="sm" class="text-destructive" title="Kill the job" onclick={() => kill(j.id)}>
+                  <AppIcons.kill class="size-4" />Kill
+                </Button>{/if}
               </div>
             </div>
           {/each}
@@ -201,10 +222,16 @@
                 <td class="px-2 py-1.5">{j.state === 'running' ? '' : j.exitCode}</td>
                 <td class="truncate px-2 py-1.5 font-mono text-micro" title={j.command}>{j.command}</td>
                 <td class="px-2 py-1.5">
-                  <div class="flex gap-1">
-                    <Button variant="ghost" size="sm" onclick={() => view(j.id)}>View</Button>
-                    <Button variant="ghost" size="sm" onclick={() => watch(j.id)}>Watch</Button>
-                    {#if j.state === 'running'}<Button variant="ghost" size="sm" class="text-destructive" onclick={() => kill(j.id)}>Kill</Button>{/if}
+                  <div class="flex gap-0.5">
+                    <Button variant="ghost" size="icon" title="View output" aria-label="View" onclick={() => view(j.id)}>
+                      <AppIcons.view class="size-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" title="Stream live output" aria-label="Watch" onclick={() => watch(j.id)}>
+                      <AppIcons.watch class="size-4" />
+                    </Button>
+                    {#if j.state === 'running'}<Button variant="ghost" size="icon" class="text-destructive" title="Kill the job" aria-label="Kill" onclick={() => kill(j.id)}>
+                      <AppIcons.kill class="size-4" />
+                    </Button>{/if}
                   </div>
                 </td>
               </tr>

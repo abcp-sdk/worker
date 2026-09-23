@@ -4,6 +4,7 @@
   // is full-width so it is actually usable.
   import { onMount } from 'svelte'
   import { Button } from '$lib/components/ui/button'
+  import { AppIcons } from '$lib/icons'
   import LoginGate from '$lib/LoginGate.svelte'
   import ShellPage from '$lib/pages/ShellPage.svelte'
   import FilesDrawer from '$lib/pages/FilesDrawer.svelte'
@@ -41,9 +42,25 @@
       </span>
       <span class="hidden font-mono text-micro text-muted-foreground sm:inline">{session.os}/{session.arch}</span>
       <span class="ml-auto"></span>
-      <Button variant="ghost" size="sm" class={drawer === 'files' ? 'bg-muted text-foreground' : ''} onclick={() => toggle('files')}>Files</Button>
-      <Button variant="ghost" size="sm" class={drawer === 'jobs' ? 'bg-muted text-foreground' : ''} onclick={() => toggle('jobs')}>Jobs</Button>
-      <Button variant="ghost" size="sm" onclick={signOut}>Sign out</Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="gap-1.5 {drawer === 'files' ? 'bg-muted text-foreground' : ''}"
+        onclick={() => toggle('files')}
+      >
+        <AppIcons.files class="size-4" />Files
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="gap-1.5 {drawer === 'jobs' ? 'bg-muted text-foreground' : ''}"
+        onclick={() => toggle('jobs')}
+      >
+        <AppIcons.jobs class="size-4" />Jobs
+      </Button>
+      <Button variant="ghost" size="sm" class="gap-1.5" onclick={signOut}>
+        <AppIcons.signOut class="size-4" /><span class="max-sm:hidden">Sign out</span>
+      </Button>
     </header>
 
     <div class="relative flex min-h-0 flex-1">

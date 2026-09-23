@@ -6,7 +6,8 @@
   // keeps running in the background (use the Jobs drawer to watch/kill it).
   import { onMount } from 'svelte'
   import { Button } from '$lib/components/ui/button'
-  import { session, client, normAbs, resolveAbs, stripAnsi } from '$lib/session.svelte'
+  import { AppIcons } from '$lib/icons'
+  import { session, client, resolveAbs, displayPath, stripAnsi } from '$lib/session.svelte'
   import { watchJob } from '$lib/worker'
 
   let termEl: HTMLDivElement | null = $state(null)
@@ -34,7 +35,7 @@
   onMount(() => inputEl?.focus())
 
   async function run(cmd: string) {
-    push('cmd', `${session.cwd || '/'} $ ${cmd}`)
+    push('cmd', `${displayPath(session.cwd || session.workspace || '/')} $ ${cmd}`)
     if (cmd === 'clear') {
       lines = []
       return
@@ -144,7 +145,7 @@
       submit()
     }}
   >
-    <span class="shrink-0 truncate font-mono text-meta text-muted-foreground">{session.cwd || '/'}</span>
+    <span class="shrink-0 truncate font-mono text-meta text-muted-foreground">{displayPath(session.cwd || session.workspace || '/')}</span>
     <span class="shrink-0 font-mono text-primary">$</span>
     <input
       bind:this={inputEl}
@@ -159,12 +160,12 @@
       type="button"
       variant="outline"
       size="sm"
-      class="shrink-0"
+      class="shrink-0 gap-1.5"
       disabled={!running}
       title="Disconnect the output stream — the job keeps running in the background"
       onclick={detach}
     >
-      Detach
+      <AppIcons.detach class="size-4" />Detach
     </Button>
   </form>
 </div>
