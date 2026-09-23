@@ -34,11 +34,14 @@ set /a N+=1
 if !N! lss 10 (ping -n 2 127.0.0.1 >nul & goto try)
 
 :have
-rem --- 2. pre-authorize the worker in Windows Firewall ------------------
-rem PORT-based (not program-based): a program rule is re-prompted when the
-rem boot-fetched binary is replaced, a port rule never is. Idempotent.
-netsh advfirewall firewall delete rule name="AgentWorker" >nul 2>&1
-netsh advfirewall firewall add rule name="AgentWorker" dir=in action=allow protocol=TCP localport=48080 >nul 2>&1
+rem --- 2. firewall: off (the sandbox is single-tenant and behind NAT) ------
+rem Disabling it entirely is simpler and more robust than a rule: no rule can
+rem miss a boot-fetched binary, and no "Windows Security" allow popup can block
+rem the worker. The VM only faces the pod's private QEMU user-net.
+netsh advfirewall set allprofiles state off >nul 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile" /v EnableFirewall /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile"   /v EnableFirewall /t REG_DWORD /d 0 /f >nul 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile"   /v EnableFirewall /t REG_DWORD /d 0 /f >nul 2>&1
 
 rem --- 3. boot-fetch the worker binary (best effort; keep the disk copy) --
 >>"%LOG%" echo [%DATE% %TIME%] launcher: fetching worker from host.lan:8090/worker
