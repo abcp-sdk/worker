@@ -7,8 +7,8 @@
 # gateway's modifications (no workspace-root containment in filesvc: relative
 # paths resolve under the workspace, absolute paths are used as-is; the default
 # workspace is ~/workspace; the Dockerfile does not bake a proxy or a mirror
-# swap). The gateway also injects this same binary into arbitrary sandbox base
-# images at launch (see workspace-gateway/worker-src).
+# swap). The workspace gateway's sandboxes run pre-built, worker-bundled images
+# built by sandbox-images/build.sh from THIS repo's source.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

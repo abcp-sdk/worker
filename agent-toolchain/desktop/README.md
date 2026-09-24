@@ -16,13 +16,13 @@ Two flavors:
 > clients, and labwc does not provide an X server. If you need to drive an X11
 > app, use the `openbox` flavor.
 
-## Not a derive-on-launch base
+## Not a sandbox base
 
-The gateway's `CreateSandbox` derives a runnable image from any base by
-overwriting its `ENTRYPOINT` with `agent-worker`. That path never starts the
-desktop. These images therefore ship their **own** entrypoint (which starts the
-screen stack *and* agent-worker) and are deployed as a plain Deployment — exactly
-like `k8s/agent-worker-android.yaml`:
+The gateway runs only `sandbox-<lang>` images (built by `sandbox-images/`), whose
+sole `ENTRYPOINT` is `agent-worker`; it never starts the desktop. These images
+therefore ship their **own** entrypoint (which starts the screen stack *and*
+agent-worker) and are deployed as a plain Deployment — exactly like
+`k8s/agent-worker-android.yaml`:
 
 ```sh
 kubectl apply -f k8s/agent-worker-desktop.yaml   # edit image tag for the flavor

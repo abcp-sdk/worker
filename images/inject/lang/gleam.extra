@@ -1,3 +1,0 @@
-
-# Gleam's package manager drives Erlang/Hex; Erlang's public_key reads the
-# system bundle and HEX_CACERTS_PATH (base image) covers Hex's own TLS config.

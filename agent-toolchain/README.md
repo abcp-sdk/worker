@@ -4,8 +4,8 @@ The **`agent-toolchain`** image catalog: generic, deployment-neutral language
 dev images pushed to the in-cluster registry under the `agent-toolchain`
 namespace. The workspace gateway's `list-oci-images` default browses exactly
 this namespace, and any of these images can be used as a **sandbox base** (the
-gateway injects the worker into it at launch — derive-on-launch) or referenced
-from `service-deploy`.
+worker-bundled sandbox images in `../sandbox-images/` are built FROM them) or
+referenced from `service-deploy`.
 
 This tree was moved here from `workspace-gateway/images/` so the worker repo
 owns the whole execution-image story (worker binary + the images sandboxes run
@@ -15,8 +15,8 @@ on). It is a curated subset of agent-worker's stage-1 toolchain build
 - Registry/namespace default to the shared catalog
   (`git.agent.svc.cluster.local/agent-toolchain`) with NATIVE `<lang>:<distro>`
   tags.
-- **No egress MITM CA and no worker binary are baked in** — the gateway injects
-  agent-worker at sandbox launch. These are plain dev images.
+- **No egress MITM CA and no worker binary are baked in** — these are plain dev
+  images; `../sandbox-images/build.sh` bakes agent-worker in to form a sandbox.
 
 ## Layout
 

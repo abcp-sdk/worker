@@ -7,12 +7,13 @@
 #
 #   * Registry/namespace default to the shared catalog namespace
 #     (git.agent.svc.cluster.local/agent-toolchain) with NATIVE `<lang>:<distro>` tags.
-#   * NO egress MITM CA and NO worker binary are baked in. The gateway injects
-#     agent-worker into ANY base image at sandbox launch time (derive-on-launch).
-#     These are plain dev toolchain images.
+#   * NO egress MITM CA and NO worker binary are baked in. These are plain dev
+#     toolchain images; the worker-bundled sandbox images are built separately
+#     by sandbox-images/build.sh (this repo) FROM these bases.
 #
 # The gateway's list-oci-images default (owner=agent-toolchain) surfaces exactly
-# this set; it is a convenience, not a restriction (any image can be a sandbox).
+# this set; it is a convenience, not a restriction (a sandbox runs a
+# sandbox-<lang> image built from these bases).
 #
 #   DISTRO=debian-trixie ./build-toolchain.sh node
 #   ./build-toolchain.sh clang       # conan + clang + libc++ + llvm

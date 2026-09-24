@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the AGENT-TOOLCHAIN generic dev images and push them to the registry
 # under the `agent-toolchain` namespace. No agent-worker, no CA — plain dev
-# images (the gateway injects the worker at sandbox launch).
+# images (sandboxes run a sandbox-<lang> image built FROM these by
+# sandbox-images/build.sh).
 #
 #   DISTRO=debian-trixie ./build-toolchain.sh node
 #   ./build-toolchain.sh            # base + every WORKSPACE_LANGS entry

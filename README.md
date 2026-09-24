@@ -5,9 +5,10 @@ worker modifications. It is the abcp-sdk-owned source of the worker binary:
 
 - the standalone/class stacks deploy it as a fixed sandbox (`class-worker`,
   `worker`), and
-- the workspace gateway injects the SAME binary into arbitrary sandbox base
-  images at launch (derive-on-launch); the gateway vendors a byte-identical
-  copy under `workspace-gateway/worker-src`.
+- the workspace gateway's sandboxes run **pre-built, worker-bundled images**
+  built by `sandbox-images/build.sh` (this repo compiles the binary into an
+  `agent-toolchain/toolchain-<lang>` base). The gateway never injects the
+  worker at launch.
 
 The binary is now **`agent-worker`** (Go module
 `github.com/abcp-sdk/agent-worker`), and it ships a built-in **control panel**
@@ -132,7 +133,7 @@ k8s/agent-worker-windows.yaml      non-privileged Windows VM worker (+ Services)
 k8s/agent-worker-macos.yaml        non-privileged macOS VM worker (+ Services)
 k8s/agent-worker-macos-xcode.yaml  the same, Xcode image, 2 vCPU / 8 GiB
 k8s/agent-worker-android.yaml      Android build toolchain + emulator + noVNC, one container
-images/android/                  Dockerfile + entrypoint + noVNC front for the emulator sandbox
+sandbox-images/                  worker-bundled sandbox images (agent-toolchain base + binary)
 ```
 
 ## Regenerate
@@ -314,7 +315,7 @@ Alternatives considered:
 
 ## Android sandbox (toolchain + official emulator + noVNC in one container)
 
-`images/android/` is a self-contained Android **development** sandbox: the
+`agent-toolchain/android/` is a self-contained Android **development** sandbox: the
 container carries the build toolchain **and** the official Android Emulator with
 an Android 35 (Google APIs, x86_64) system image, so a single job can build an
 APK and immediately install/run it in the guest.
@@ -352,7 +353,7 @@ plain `gradle assembleDebug` works even when the env is not set.
 
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
-./images/android/build.sh                   # -> <registry>/agent-worker-android:v1.0.0
+./agent-toolchain/android/build.sh          # -> <registry>/agent-toolchain/agent-worker-android:v0.1.0-aosp
 kubectl apply -f k8s/agent-worker-android.yaml
 ```
 
