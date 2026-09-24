@@ -53,8 +53,24 @@ if defined DLSZ if !DLSZ! GTR 1000000 (
   move /y "%DL%" "%BIN%" >nul 2>&1 && (echo [%DATE% %TIME%] launcher: worker refreshed >nul) || set "BIN=%DL%"
 )
 
-rem --- 4. run the worker in this (docker) session -----------------------
+rem --- 4. run the worker in this (docker) session, supervised ------------
+rem The worker can exit on its own (a panic in the shell interpreter, a bad
+rem job, ...). Without a supervisor the task ends and the worker stays down
+rem until the next logon — losing the sandbox. Loop it, with a short backoff
+rem so a crash-on-start cannot spin the CPU. (macOS gets the same effect from
+rem launchd's KeepAlive.)
+set /a RESTARTS=0
+:run
 >>"%LOG%" echo [%DATE% %TIME%] launcher: starting worker as %USERNAME% (%BIN%)
 "%BIN%" -addr 0.0.0.0:48080 -workspace "%WS%" -db "%WS%\jobs.db" >>"%LOG%" 2>&1
+set "RC=!ERRORLEVEL!"
+set /a RESTARTS+=1
+>>"%LOG%" echo [%DATE% %TIME%] launcher: worker exited rc=!RC! (restart #!RESTARTS!)
+rem Backoff: 3s normally, up to ~30s if it keeps dying immediately.
+set /a WAIT=3
+if !RESTARTS! GTR 5 set /a WAIT=10
+if !RESTARTS! GTR 20 set /a WAIT=30
+ping -n !WAIT! 127.0.0.1 >nul
+goto run
 
 endlocal

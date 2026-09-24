@@ -331,7 +331,7 @@ func (r *Runner) execMiddleware(env []string) func(next interp.ExecHandlerFunc) 
 				}
 				var ee *exec.ExitError
 				if ok := asExitError(err, &ee); ok {
-					return interp.ExitStatus(ee.ExitCode())
+					return interp.ExitStatus(sanitizeExitCode(ee.ExitCode()))
 				}
 				return interp.ExitStatus(127)
 			}
@@ -389,6 +389,23 @@ func asExitError(err error, target **exec.ExitError) bool {
 		*target = ee
 	}
 	return ok
+}
+
+// sanitizeExitCode maps a process exit code to the 0-255 range the mvdan
+// interpreter expects (its ExitStatus is a uint8). Windows exit codes are
+// 32-bit, so a code like 256 or 0xC0000005 (STATUS_ACCESS_VIOLATION) would
+// otherwise truncate to 0 — and returning `interp.ExitStatus(0)` for a failed
+// process breaks the interpreter's invariant (non-nil err + code 0) and makes
+// it PANIC, killing the whole worker. Never let a failed command map to 0.
+func sanitizeExitCode(code int) uint8 {
+	if code < 0 {
+		code = -code
+	}
+	c := code & 0xff
+	if c == 0 {
+		c = 1
+	}
+	return uint8(c)
 }
 
 var _ = bytes.MinRead // keep bytes import when refactors drop its use

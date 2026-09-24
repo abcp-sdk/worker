@@ -137,6 +137,20 @@ func (m *Manager) Execute(ctx context.Context, command, workdir string, env map[
 		defer w.Close()
 		defer job.finishSubs()
 
+		// A panic anywhere in the interpreter/exec path must not take down the
+		// whole worker (an unrecovered panic in ANY goroutine crashes the
+		// process, dropping every other job and the sandbox). Recover, record
+		// it as the job's failure, and keep serving.
+		defer func() {
+			if rec := recover(); rec != nil {
+				job.State = StateFailed
+				job.ExitCode = 1
+				job.FinishedAt = time.Now().UnixMilli()
+				job.Stderr.Write([]byte(fmt.Sprintf("worker: job panicked: %v\n", rec)))
+				m.store.FinishJob(id, StateFailed, 1, job.FinishedAt)
+			}
+		}()
+
 		shellh.Debugf("job %s: goroutine start (cmd=%q)", id, command)
 		res, err := m.runner.RunWithEnv(jobCtx, command, workdir, env, r, job.Stdout, job.Stderr)
 		shellh.Debugf("job %s: Run returned (err=%v, exit=%d, ctxErr=%v) mono=%d", id, err, res.ExitCode, jobCtx.Err() != nil, shellh.MonoMS())

@@ -181,3 +181,23 @@ func TestLineBufferSplitCRLF(t *testing.T) {
 		t.Fatalf("split CRLF recs = %v", got)
 	}
 }
+
+func TestSanitizeExitCode(t *testing.T) {
+	cases := []struct{ in int; want uint8 }{
+		{0, 1},          // a failed process must never map to 0
+		{1, 1},
+		{255, 255},
+		{256, 1},        // 256 & 0xff == 0 -> must become 1 (was the panic)
+		{512, 1},        // 512 & 0xff == 0 -> 1
+		{0xC0000005, 5}, // STATUS_ACCESS_VIOLATION (0x...05) -> 5, not 0
+		{-1, 1},
+	}
+	for _, c := range cases {
+		if got := sanitizeExitCode(c.in); got != c.want {
+			t.Errorf("sanitizeExitCode(%d)=%d want %d", c.in, got, c.want)
+		}
+		if got := sanitizeExitCode(c.in); got == 0 {
+			t.Errorf("sanitizeExitCode(%d) returned 0 (would panic the interpreter)", c.in)
+		}
+	}
+}
