@@ -21,21 +21,35 @@ run-only (not sandbox bases).
 
 ## Image naming (unified)
 
-Every image is `<org>/<role>-<subject>:<tag>`:
+Every image is `<org>/<role>-<subject>:<tag>`. **All images a sandbox may run
+live in the `sandbox` org** — the gateway's `CreateSandbox` refuses any other
+org.
 
 | org | role | subject | tag | example |
 |---|---|---|---|---|
 | `agent-toolchain` | `toolchain` | language | `debian-trixie` | `agent-toolchain/toolchain-node:debian-trixie` |
 | `sandbox` | `sandbox` | language | `debian-trixie` | `sandbox/sandbox-node:debian-trixie` |
-| `agent-toolchain` | `sandbox` | OS | variant | `agent-toolchain/sandbox-windows:devtools` |
+| `sandbox` | `sandbox` | OS | variant | `sandbox/sandbox-windows:devtools` |
 
-The OS sandboxes (`sandbox-macos`, `sandbox-windows`, `sandbox-android`,
-`sandbox-desktop`) deliberately stay in **`agent-toolchain`**, NOT `sandbox`:
-they ship their own entrypoint (screen stack / VM runtime + worker), so the
-gateway's `CreateSandbox` must not treat them as gateway-launchable
-`agent-worker`-ENTRYPOINT images. OS tags are the bare variant
+OS sandboxes: `sandbox-{macos,windows,android,desktop}` with bare variant tags
 (`base`/`xcode`/`devtools`/`aosp`/`gms`/`openbox`/`labwc`), matching the lang
 trees' bare-distro tags. The repo's git tag (`v0.1.0`) carries the release.
+
+### OS sandbox call parameters (CreateSandbox)
+
+The gateway exposes `kvm` and `cpu`/`memory`; the OS images need them:
+
+| image | kvm | cpu/memory | notes |
+|---|---|---|---|
+| `sandbox/sandbox-desktop:{openbox,labwc}` | no | default fine | screen stack + noVNC; worker starts first |
+| `sandbox/sandbox-android:{aosp,gms}` | **yes** | ≥4 / ≥8Gi | worker starts first; emulator boots in the background, so jobs must `adb wait-for-device` |
+| `sandbox/sandbox-windows:{base,devtools}` | **yes** | 8 / 32Gi | guest RAM/CPU come from the image ENV; the pod must be sized above them |
+| `sandbox/sandbox-macos:{base,xcode}` | **yes** | 4 / 16Gi | same |
+
+The gateway's `CreateSandbox` waits only **60s** for `:48080`. The linux/desktop
+images are ready in seconds; the VM/Android sandboxes boot a guest first, so the
+call may return `DeadlineExceeded` while the sandbox is still coming up (it is
+left in place and becomes ready on its own).
 
 ## Prerequisites on the host
 
@@ -60,7 +74,8 @@ scripts/build-all.sh                       # 1. dist/ cross-compiled binaries (1
 fresh checkout has neither. A build without the needed cache artifact fails
 loudly with the missing filename (that is by design).
 
-VM / Android / Desktop (separate, need `dist/` staged first):
+VM / Android / Desktop (separate, need `dist/` staged first). All four push to
+the `sandbox` org (`NAMESPACE=sandbox` default):
 
 ```sh
 ./agent-toolchain/vm/macos/build.sh   base|xcode
@@ -69,12 +84,16 @@ VM / Android / Desktop (separate, need `dist/` staged first):
 ./agent-toolchain/desktop/build.sh    openbox|labwc
 ```
 
+The VM goldens (`<variant>/data.qcow2` + `disk-support/`) are git-ignored and
+staged outside the repo; without them only a retag of the published image is
+possible, not a rebuild.
+
 ## Registry / naming
 
-- `REGISTRY=git.agent.svc.cluster.local`, `NAMESPACE=agent-toolchain` (toolchain,
-  VM/android/desktop), `SANDBOX_ORG=sandbox` (sandbox-images).
-- Tags: toolchain/sandbox lang images use `debian-trixie`; OS sandboxes use the
-  bare variant. All names are `<role>-<subject>` — see the naming table above.
+- `REGISTRY=git.agent.svc.cluster.local`. Every sandbox-runnable image is under
+  `NAMESPACE=sandbox`; generic toolchain bases are under `agent-toolchain`.
+- Tags: lang sandbox images use `debian-trixie`; OS sandboxes use the bare
+  variant. All names are `<role>-<subject>` — see the naming table above.
 - `scripts/retag.sh <src-repo> <src-tag> <dst-repo> <dst-tag>` re-tags within
   the registry via cross-repo blob mount (no bytes re-uploaded) — used to move
   the catalog to the unified names without rebuilding the multi-GB VM disks.

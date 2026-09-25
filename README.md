@@ -342,7 +342,11 @@ Xvfb :99  ->  emulator Qt window (xcb, -fixed-scale)
           ->  x11vnc :5900  ->  websockify :6081  ->  nginx :6080 (noVNC)
 ```
 
-The entrypoint pins the device window to the top-left and hides the emulator
+The entrypoint starts agent-worker **first** (the gateway's `CreateSandbox`
+waits only 60s for `:48080`), then brings the emulator up in the background; a
+job that needs the device waits for it itself (`adb wait-for-device` +
+`getprop sys.boot_completed`). The entrypoint also pins the device window to the
+top-left and hides the emulator
 toolbar/sidebar, so the browser view is exactly the 1080x2400 device screen.
 
 The worker runs on the host side (Android cannot run the linux/amd64 Go worker)
@@ -353,7 +357,7 @@ plain `gradle assembleDebug` works even when the env is not set.
 
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
-./agent-toolchain/android/build.sh          # -> <registry>/agent-toolchain/sandbox-android:aosp
+./agent-toolchain/android/build.sh          # -> <registry>/sandbox/sandbox-android:aosp
 kubectl apply -f k8s/agent-worker-android.yaml
 ```
 

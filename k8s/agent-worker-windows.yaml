@@ -35,7 +35,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: windows
-          image: <registry>/agent-toolchain/sandbox-windows:devtools
+          image: <registry>/sandbox/sandbox-windows:devtools
           imagePullPolicy: IfNotPresent
 
           # NOT privileged. KVM is delivered by the device plugin: requesting

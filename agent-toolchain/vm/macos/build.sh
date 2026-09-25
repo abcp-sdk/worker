@@ -27,7 +27,7 @@ case "$VARIANT" in
 esac
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
-NAMESPACE="${NAMESPACE:-agent-toolchain}"
+NAMESPACE="${NAMESPACE:-sandbox}"
 NAME="${NAME:-sandbox-macos}"
 TAG="${TAG:-${VARIANT}}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"

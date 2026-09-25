@@ -37,7 +37,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: android
-          image: <registry>/agent-toolchain/sandbox-android:aosp
+          image: <registry>/sandbox/sandbox-android:aosp
           imagePullPolicy: IfNotPresent
 
           securityContext:

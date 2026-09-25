@@ -2,12 +2,13 @@
 # stack + agent-worker baked into one image), viewable in a browser via noVNC.
 #
 # Two flavors share this manifest; switch `image` (and the app label) between:
-#   agent-toolchain/sandbox-desktop:openbox   # pure X11 (openbox)
-#   agent-toolchain/sandbox-desktop:labwc     # pure Wayland (labwc)
+#   sandbox/sandbox-desktop:openbox   # pure X11 (openbox)
+#   sandbox/sandbox-desktop:labwc     # pure Wayland (labwc)
 #
-# This image is NOT launched through the gateway's derive-on-launch path (that
-# forces agent-worker as the sole ENTRYPOINT and would never start the desktop).
-# It runs as a plain Deployment, exactly like k8s/agent-worker-android.yaml.
+# The gateway does not override the entrypoint, so this image is also a normal
+# CreateSandbox target (org `sandbox`, no kvm). This manifest runs it as a plain
+# Deployment instead — handy for a long-lived desktop, like
+# k8s/agent-worker-android.yaml.
 #
 # Endpoints (inside the pod):
 #   :48080  Worker API  (WorkerService + WorkerEnroll)
@@ -36,7 +37,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: desktop
-          image: <registry>/agent-toolchain/sandbox-desktop:openbox
+          image: <registry>/sandbox/sandbox-desktop:openbox
           imagePullPolicy: IfNotPresent
 
           securityContext:

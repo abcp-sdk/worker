@@ -16,12 +16,16 @@ Two flavors:
 > clients, and labwc does not provide an X server. If you need to drive an X11
 > app, use the `openbox` flavor.
 
-## Not a sandbox base
+## Gateway sandbox
 
-The gateway runs only `sandbox-<lang>` images (built by `sandbox-images/`), whose
-sole `ENTRYPOINT` is `agent-worker`; it never starts the desktop. These images
-therefore ship their **own** entrypoint (which starts the screen stack *and*
-agent-worker) and are deployed as a plain Deployment — exactly like
+Unlike `sandbox-<lang>` images (whose sole `ENTRYPOINT` is `agent-worker`), this
+image ships its **own** entrypoint that starts the screen stack *and*
+agent-worker. The gateway does not override the entrypoint, so it is a normal
+`CreateSandbox` target like any `sandbox/` image (no `kvm` needed). The worker
+comes up first (readiness in seconds); the screen stack starts in the
+background.
+
+You can also run it as a plain Deployment — exactly like
 `k8s/agent-worker-android.yaml`:
 
 ```sh
@@ -35,9 +39,9 @@ Endpoints (in-pod): `:48080` worker API, `:6080` noVNC (open, ClusterIP only),
 
 ```
 openbox/Containerfile    pure-X11 image (Xvfb/openbox/x11vnc/noVNC + worker)
-openbox/entrypoint.sh    starts the X11 stack, then agent-worker
+openbox/entrypoint.sh    starts agent-worker, then the X11 stack (background)
 labwc/Containerfile      pure-Wayland image (labwc/wayvnc/noVNC + worker)
-labwc/entrypoint.sh      starts the Wayland stack, then agent-worker
+labwc/entrypoint.sh      starts agent-worker, then the Wayland stack (background)
 build.sh                 build+push one flavor (buildctl → skopeo → registry)
 ```
 
@@ -45,8 +49,8 @@ build.sh                 build+push one flavor (buildctl → skopeo → registry
 
 ```sh
 scripts/build-all.sh                          # dist/agent-worker-linux-amd64
-./agent-toolchain/desktop/build.sh openbox    # -> agent-toolchain/sandbox-desktop:openbox
-./agent-toolchain/desktop/build.sh labwc      # -> agent-toolchain/sandbox-desktop:labwc
+./agent-toolchain/desktop/build.sh openbox    # -> sandbox/sandbox-desktop:openbox
+./agent-toolchain/desktop/build.sh labwc      # -> sandbox/sandbox-desktop:labwc
 ```
 
 ## Display env reaches jobs

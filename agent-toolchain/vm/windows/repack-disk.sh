@@ -19,15 +19,18 @@
 # The replacement layer keeps the source layer's exact tar structure, i.e.
 #   storage/data.qcow2  (+ storage/windows.vars when present).
 #
-# Env: REGISTRY, NAME, ZSTD_LEVEL (19), ZSTD_WINDOW (27), ZSTD_THREADS (4), WORK.
+# Env: REGISTRY, NAMESPACE (default sandbox), NAME, ZSTD_LEVEL (19),
+#      ZSTD_WINDOW (27), ZSTD_THREADS (4), WORK.
 set -Eeuo pipefail
 
 DISK="${1:?defragged qcow2}"
 SRCTAG="${2:?source tag}"
 DSTTAG="${3:?destination tag}"
 
-REGISTRY="${REGISTRY:-git.agent.svc.cluster.local/root}"
+REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
+NAMESPACE="${NAMESPACE:-sandbox}"
 NAME="${NAME:-sandbox-windows}"
+REF="$REGISTRY/$NAMESPACE/$NAME"
 LEVEL="${ZSTD_LEVEL:-19}"
 WINDOW="${ZSTD_WINDOW:-27}"
 THREADS="${ZSTD_THREADS:-4}"
@@ -42,7 +45,7 @@ cd "$W"
 
 echo "===== 1. pull $SRCTAG ====="
 skopeo copy --src-tls-verify=false --src-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
-  "docker://$REGISTRY/$NAME:$SRCTAG" "dir:$W/img"
+  "docker://$REF:$SRCTAG" "dir:$W/img"
 
 echo
 echo "===== 2. locate the disk layer (largest) ====="
@@ -111,7 +114,7 @@ PY
 echo
 echo "===== 6. push $DSTTAG ====="
 skopeo copy --dest-tls-verify=false --dest-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
-  "dir:$W/img" "docker://$REGISTRY/$NAME:$DSTTAG"
+  "dir:$W/img" "docker://$REF:$DSTTAG"
 skopeo inspect --creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" --tls-verify=false \
-  "docker://$REGISTRY/$NAME:$DSTTAG" | grep '"Digest"' | head -1
+  "docker://$REF:$DSTTAG" | grep '"Digest"' | head -1
 echo "REPACKED_WINDOWS"

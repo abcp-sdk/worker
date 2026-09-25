@@ -34,7 +34,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: macos
-          image: <registry>/agent-toolchain/sandbox-macos:base
+          image: <registry>/sandbox/sandbox-macos:base
           imagePullPolicy: IfNotPresent
 
           securityContext:

@@ -3,8 +3,8 @@
 #
 #   scripts/retag.sh <src-repo> <src-tag> <dst-repo> <dst-tag>
 #
-#   scripts/retag.sh agent-toolchain/agent-worker-macos v0.1.0-base \
-#                    agent-toolchain/sandbox-macos base
+#   scripts/retag.sh agent-toolchain/sandbox-windows base \
+#                    sandbox/sandbox-windows base
 #
 # Uses the Registry v2 API directly: every config/layer blob is mounted from the
 # source repo into the destination repo (cross-repo blob mount — no bytes are

@@ -36,21 +36,19 @@ android/                  Android emulator sandbox image (run-only) + screen bri
 desktop/                  graphical desktop sandbox (openbox=pure X11 / labwc=pure Wayland) + noVNC
 ```
 
-## VM / Android sandboxes
+## VM / Android / Desktop sandboxes
 
-`vm/` and `android/` hold the non-linux sandbox images: a pre-baked guest disk
-wrapped in a self-owned runtime (generic `qemux/qemu:750` + vendored boot
-scripts). The worker binary is **boot-fetched** by the guest from the
-container's nginx (`http://host.lan:8090/worker`) on every start, so a worker
-upgrade is an image rebuild — the golden disk only needs a one-time launcher
-update.
+`vm/`, `android/` and `desktop/` hold the non-linux sandbox images. They push to
+the **`sandbox` org** (like `sandbox-images/`), so the gateway's `CreateSandbox`
+can run them; `CreateSandbox(kvm=true)` supplies `/dev/kvm` + `/dev/net/tun` +
+the cap/unconfined security context that the VM and Android images need.
 
-| dir | variants | base |
-|---|---|---|
-| `vm/macos/`   | `base`, `xcode`      | macOS 15 Sequoia |
-| `vm/windows/` | `base`, `devtools`   | Windows 11 (devtools = MSVC + Windows SDK + .NET) |
-| `android/`    | `aosp`, `gms`        | official Android emulator, run-only |
-| `desktop/`    | `openbox`, `labwc`   | toolchain-base; X11 or Wayland desktop + noVNC, run-only |
+| dir | image | variants | base |
+|---|---|---|---|
+| `vm/macos/`   | `sandbox/sandbox-macos`   | `base`, `xcode`    | macOS 15 Sequoia |
+| `vm/windows/` | `sandbox/sandbox-windows` | `base`, `devtools` | Windows 11 (devtools = MSVC + Windows SDK + .NET) |
+| `android/`    | `sandbox/sandbox-android` | `aosp`, `gms`      | official Android emulator |
+| `desktop/`    | `sandbox/sandbox-desktop` | `openbox`, `labwc` | toolchain-base; X11 or Wayland desktop + noVNC |
 
 ```sh
 scripts/build-all.sh                      # dist/agent-worker-* (all platforms)
@@ -64,9 +62,15 @@ scripts/build-all.sh                      # dist/agent-worker-* (all platforms)
 ./agent-toolchain/desktop/build.sh labwc
 ```
 
-Guest disks and boot support files are staged (git-ignored) under each
+The VM runtime is a pre-baked guest disk wrapped in a self-owned runtime
+(generic `qemux/qemu:750` + vendored boot scripts). The worker binary is
+**boot-fetched** by the guest from the container's nginx
+(`http://host.lan:8090/worker`) on every start, so a worker upgrade is an image
+rebuild. Guest disks and boot support files are staged (git-ignored) under each
 variant's `disk/` (macOS) or `disk/` + `disk-support/` (Windows); see the
-per-tree `README.md`.
+per-tree `README.md`. The Android and Desktop entrypoints start agent-worker
+**first** (the gateway waits only 60s for `:48080`); the emulator / screen stack
+comes up in the background.
 
 
 ## Build

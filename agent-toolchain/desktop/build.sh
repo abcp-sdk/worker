@@ -25,7 +25,7 @@ case "$FLAVOR" in
 esac
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
-NAMESPACE="${NAMESPACE:-agent-toolchain}"
+NAMESPACE="${NAMESPACE:-sandbox}"
 NAME="${NAME:-sandbox-desktop}"
 TAG="${TAG:-$FLAVOR}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"

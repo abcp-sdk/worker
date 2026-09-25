@@ -38,9 +38,9 @@
 #   repack:  ./repack-disk.sh <kind> <golden.defrag.qcow2> <srctag> <dsttag>
 #     e.g.   ./repack-disk.sh base /work/basic.defrag.qcow2 v1.4.0-base v1.5.0-base
 #
-# Env: REGISTRY (default git.agent.svc.cluster.local/root),
-#      NAME (default sandbox-macos), ZSTD_LEVEL (19), ZSTD_WINDOW (27),
-#      ZSTD_THREADS (4), WORK (scratch dir).
+# Env: REGISTRY (default git.agent.svc.cluster.local),
+#      NAMESPACE (default sandbox), NAME (default sandbox-macos),
+#      ZSTD_LEVEL (19), ZSTD_WINDOW (27), ZSTD_THREADS (4), WORK (scratch dir).
 set -Eeuo pipefail
 
 KIND="${1:?kind (tag suffix, e.g. base)}"
@@ -48,8 +48,10 @@ DISK="${2:?defragged qcow2}"
 SRCTAG="${3:?source tag}"
 DSTTAG="${4:?destination tag}"
 
-REGISTRY="${REGISTRY:-git.agent.svc.cluster.local/root}"
+REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
+NAMESPACE="${NAMESPACE:-sandbox}"
 NAME="${NAME:-sandbox-macos}"
+REF="$REGISTRY/$NAMESPACE/$NAME"
 LEVEL="${ZSTD_LEVEL:-19}"
 WINDOW="${ZSTD_WINDOW:-27}"
 THREADS="${ZSTD_THREADS:-4}"
@@ -64,7 +66,7 @@ cd "$W"
 
 echo "===== 1. pull $SRCTAG ====="
 skopeo copy --src-tls-verify=false --src-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
-  "docker://$REGISTRY/$NAME:$SRCTAG" "dir:$W/img"
+  "docker://$REF:$SRCTAG" "dir:$W/img"
 
 echo
 echo "===== 2. locate the disk layer (largest) ====="
@@ -129,7 +131,7 @@ PY
 echo
 echo "===== 6. push $DSTTAG ====="
 skopeo copy --dest-tls-verify=false --dest-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
-  "dir:$W/img" "docker://$REGISTRY/$NAME:$DSTTAG"
+  "dir:$W/img" "docker://$REF:$DSTTAG"
 skopeo inspect --creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" --tls-verify=false \
-  "docker://$REGISTRY/$NAME:$DSTTAG" | grep '"Digest"' | head -1
+  "docker://$REF:$DSTTAG" | grep '"Digest"' | head -1
 echo "REPACKED_$KIND"
