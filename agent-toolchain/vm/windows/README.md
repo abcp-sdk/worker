@@ -35,8 +35,8 @@ worker and every job it spawns already hold a full **High-IL** admin token.
 
 | tag | contents |
 |---|---|
-| `v0.1.0-base`     | clean Windows 11 + worker |
-| `v0.1.0-devtools` | + Visual Studio Build Tools (MSVC) + Windows SDK + .NET SDK |
+| `base`     | clean Windows 11 + worker |
+| `devtools` | + Visual Studio Build Tools (MSVC) + Windows SDK + .NET SDK |
 
 ## Building
 
@@ -50,7 +50,7 @@ scripts/build-all.sh                        # dist/agent-worker-windows-amd64.ex
 # optional: shrink the disk layer
 qemu-img convert -f qcow2 -O qcow2 -o cluster_size=1M,lazy_refcounts=on \
   base/data.qcow2 base/defrag.qcow2
-./agent-toolchain/vm/windows/repack-disk.sh base/defrag.qcow2 v0.1.0-base v0.1.0-base
+./agent-toolchain/vm/windows/repack-disk.sh base/defrag.qcow2 base base
 ```
 
 The guest disk is rebuilt by booting the previous image's disk (hostPath-backed

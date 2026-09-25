@@ -28,8 +28,8 @@ esac
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
 NAMESPACE="${NAMESPACE:-agent-toolchain}"
-NAME="${NAME:-agent-worker-macos}"
-TAG="${TAG:-v0.1.0-${VARIANT}}"
+NAME="${NAME:-sandbox-macos}"
+TAG="${TAG:-${VARIANT}}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"
 BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.agent.svc.cluster.local:1234}"
 PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"

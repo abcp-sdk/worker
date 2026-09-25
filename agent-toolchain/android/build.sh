@@ -2,7 +2,7 @@
 # Build and push the agent-worker Android (emulator) sandbox image.
 #
 #   ./agent-toolchain/android/build.sh [aosp|gms]        # default: aosp
-#   FLAVOR=gms TAG=v0.1.0-gms ./agent-toolchain/android/build.sh
+#   FLAVOR=gms TAG=gms ./agent-toolchain/android/build.sh
 #
 # RUN-ONLY: the image ships the official Android emulator, a system image, adb
 # and the screen bridge — no JDK/Gradle/build-tools/cmdline-tools. Build the
@@ -27,8 +27,8 @@ esac
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local}"
 NAMESPACE="${NAMESPACE:-agent-toolchain}"
-NAME="${NAME:-agent-worker-android}"
-TAG="${TAG:-v0.1.0-$FLAVOR}"
+NAME="${NAME:-sandbox-android}"
+TAG="${TAG:-$FLAVOR}"
 DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"
 BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.agent.svc.cluster.local:1234}"
 PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"

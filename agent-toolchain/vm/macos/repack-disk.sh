@@ -39,7 +39,7 @@
 #     e.g.   ./repack-disk.sh base /work/basic.defrag.qcow2 v1.4.0-base v1.5.0-base
 #
 # Env: REGISTRY (default git.agent.svc.cluster.local/root),
-#      NAME (default agent-worker-macos), ZSTD_LEVEL (19), ZSTD_WINDOW (27),
+#      NAME (default sandbox-macos), ZSTD_LEVEL (19), ZSTD_WINDOW (27),
 #      ZSTD_THREADS (4), WORK (scratch dir).
 set -Eeuo pipefail
 
@@ -49,7 +49,7 @@ SRCTAG="${3:?source tag}"
 DSTTAG="${4:?destination tag}"
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local/root}"
-NAME="${NAME:-agent-worker-macos}"
+NAME="${NAME:-sandbox-macos}"
 LEVEL="${ZSTD_LEVEL:-19}"
 WINDOW="${ZSTD_WINDOW:-27}"
 THREADS="${ZSTD_THREADS:-4}"

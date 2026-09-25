@@ -45,8 +45,8 @@ build.sh                 build+push one flavor (buildctl → skopeo → registry
 
 ```sh
 scripts/build-all.sh                          # dist/agent-worker-linux-amd64
-./agent-toolchain/desktop/build.sh openbox    # -> agent-toolchain/agent-worker-desktop:v0.1.0-openbox
-./agent-toolchain/desktop/build.sh labwc      # -> agent-toolchain/agent-worker-desktop:v0.1.0-labwc
+./agent-toolchain/desktop/build.sh openbox    # -> agent-toolchain/sandbox-desktop:openbox
+./agent-toolchain/desktop/build.sh labwc      # -> agent-toolchain/sandbox-desktop:labwc
 ```
 
 ## Display env reaches jobs

@@ -27,7 +27,7 @@ SRCTAG="${2:?source tag}"
 DSTTAG="${3:?destination tag}"
 
 REGISTRY="${REGISTRY:-git.agent.svc.cluster.local/root}"
-NAME="${NAME:-agent-worker-windows}"
+NAME="${NAME:-sandbox-windows}"
 LEVEL="${ZSTD_LEVEL:-19}"
 WINDOW="${ZSTD_WINDOW:-27}"
 THREADS="${ZSTD_THREADS:-4}"

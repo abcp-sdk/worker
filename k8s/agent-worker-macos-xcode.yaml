@@ -32,7 +32,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: macos
-          image: <registry>/agent-toolchain/agent-worker-macos:v0.1.0-xcode
+          image: <registry>/agent-toolchain/sandbox-macos:xcode
           imagePullPolicy: IfNotPresent
 
           securityContext:

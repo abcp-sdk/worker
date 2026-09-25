@@ -2,8 +2,8 @@
 # stack + agent-worker baked into one image), viewable in a browser via noVNC.
 #
 # Two flavors share this manifest; switch `image` (and the app label) between:
-#   agent-toolchain/agent-worker-desktop:v0.1.0-openbox   # pure X11 (openbox)
-#   agent-toolchain/agent-worker-desktop:v0.1.0-labwc     # pure Wayland (labwc)
+#   agent-toolchain/sandbox-desktop:openbox   # pure X11 (openbox)
+#   agent-toolchain/sandbox-desktop:labwc     # pure Wayland (labwc)
 #
 # This image is NOT launched through the gateway's derive-on-launch path (that
 # forces agent-worker as the sole ENTRYPOINT and would never start the desktop).
@@ -36,7 +36,7 @@ spec:
         - name: <registry-credentials>
       containers:
         - name: desktop
-          image: <registry>/agent-toolchain/agent-worker-desktop:v0.1.0-openbox
+          image: <registry>/agent-toolchain/sandbox-desktop:openbox
           imagePullPolicy: IfNotPresent
 
           securityContext:

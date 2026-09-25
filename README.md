@@ -353,7 +353,7 @@ plain `gradle assembleDebug` works even when the env is not set.
 
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
-./agent-toolchain/android/build.sh          # -> <registry>/agent-toolchain/agent-worker-android:v0.1.0-aosp
+./agent-toolchain/android/build.sh          # -> <registry>/agent-toolchain/sandbox-android:aosp
 kubectl apply -f k8s/agent-worker-android.yaml
 ```
 
