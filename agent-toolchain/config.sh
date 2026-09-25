@@ -53,7 +53,7 @@ TOOLCHAIN_TAG="${TOOLCHAIN_TAG:-${DISTRO_TAG}}"
 # C/C++ toolchain (conan + clang + libc++ + llvm); it is the one image built
 # from the raw distro base (via clang.base = @distro) instead of toolchain-base,
 # because it deliberately ships WITHOUT gcc.
-WORKSPACE_LANGS="${WORKSPACE_LANGS:-node python go rust java kotlin scala dart dotnet elixir php ruby swift zig clang}"
+WORKSPACE_LANGS="${WORKSPACE_LANGS:-node python go rust java java25 kotlin scala clojure groovy dart dotnet elixir gleam php ruby swift zig clang bun deno julia crystal ocaml haskell lua perl r conda pixi godot}"
 
 # Artifact cache. The workspace cache hardlinks the agent-worker one and adds the
 # versions the workspace pins (node 26.9.0, JDK 26, sbt 1.13.0, zig 0.16.0).
@@ -95,12 +95,23 @@ build_image() (
 
   local dest="${REGISTRY}/${NAMESPACE}/${name}:${tag}"
   echo "== build ${name}:${tag} on ${BUILDKIT} (from ${base}) =="
+  # buildkitd injects NO proxy env into RUN steps, so a Dockerfile that talks to
+  # the network (apt in r/godot/... , distro setup) would otherwise hit upstream
+  # directly — benchmarked at ~25 KB/s vs ~13.5 MB/s through mihomo, which makes
+  # those layers crawl for tens of minutes. Pass the proxy as build-args; they
+  # only affect the build (no ENV persists them into the image).
   buildctl --addr "${BUILDKIT}" build \
     --frontend dockerfile.v0 \
     --local "context=${ctx}" \
     --local "dockerfile=${ctx}" \
     --opt "filename=Dockerfile" \
     --opt "build-arg:BASE_IMAGE=${base}" \
+    --opt "build-arg:HTTP_PROXY=${BUILD_PROXY}" \
+    --opt "build-arg:HTTPS_PROXY=${BUILD_PROXY}" \
+    --opt "build-arg:http_proxy=${BUILD_PROXY}" \
+    --opt "build-arg:https_proxy=${BUILD_PROXY}" \
+    --opt "build-arg:NO_PROXY=${NO_PROXY}" \
+    --opt "build-arg:no_proxy=${NO_PROXY}" \
     --output "type=docker,name=${name}:${tag},dest=${work}/image.tar" \
     --progress plain
   echo "== push ${dest} =="

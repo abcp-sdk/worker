@@ -114,6 +114,33 @@ tarball; `fetch-artifacts.sh` assembles it from PyPI via `pip download` (conan
 is public), pinned to CPython 3.14 / manylinux_2_28 so it works regardless of
 the host's Python. Set `FETCH_CONAN=0` to skip it when not building `clang`.
 
+**Hex (elixir) is mirrored locally.** `repo.hex.pm/installs/{elixir}/hex-*.ez`
+(and the registry public key) 301-redirects to a path that 404s, so the elixir
+toolchain cannot fetch them upstream. Put the working files in
+`toolchain/urls.local.env` (git-ignored) to point `fetch-artifacts.sh` at a
+local store; do not "fix" the pinned URL in `urls.env` — it is correct, the
+public path is just unstable.
+
+## Known gotcha: buildkitd injects NO proxy into RUN steps
+
+`buildkitd` runs without any HTTP proxy env of its own, so a `RUN` that talks
+to the network (the apt layers in `Dockerfile.r`, `Dockerfile.godot`, the
+distro/base setup) reaches `deb.debian.org` **directly at ~25 KB/s** instead of
+~13.5 MB/s through `mihomo` — an apt layer that should take seconds crawls for
+30+ minutes. Fixing it needs both halves:
+
+1. `config.sh:build_image` passes `HTTP(S)_PROXY` + `NO_PROXY` as build-args;
+   Dockerfile RUN steps inherit them as env automatically.
+2. A Dockerfile whose RUN text never **references** the proxy still caches
+   identically, so BuildKit may attach the new build to an **orphaned exec**
+   left by an earlier killed client (BuildKit does not cancel an exec when its
+   client dies). Declaring/referencing the arg (`echo "apt via ${HTTP_PROXY:-direct}"`)
+   changes the step digest and forces a fresh, proxied exec.
+
+Toolchain images that only `COPY cache/` (no network) are unaffected. The
+predecessor tree passed the same build-args for its android/VM images
+(`easyworker-new/images/*/build.sh`).
+
 ## Effort (rough, single builder, cold cache)
 
 - `scripts/build-all.sh`: ~1 min.

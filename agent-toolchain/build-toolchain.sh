@@ -46,8 +46,40 @@ build() { # proto
   build_image "$name" "$df" "$TOOLCHAIN_TAG" "$parent"
 }
 
-# java25 is the parent of kotlin/scala; build it first when either is requested.
-case " ${LANGS} " in
-  *" kotlin "*|*" scala "*) case " ${LANGS} " in *" java25 "*) ;; *) LANGS="java25 ${LANGS}" ;; esac ;;
-esac
+# A `<lang>.base` may name a sibling toolchain as parent (kotlin/scala/clojure/
+# groovy -> java25, gleam -> elixir, ...). If that parent is not already in the
+# registry, build it FIRST by prepending it (iterating, so a parent's own
+# parent is handled too). When the parent already exists, the child's build just
+# pulls it — rebuilding it would also re-hit upstream pins unnecessarily.
+sibling_parent() { # lang -> parent lang, or empty
+  local dfproto="$1"; [ "$dfproto" = "go" ] && dfproto="golang"
+  local f="${DIR}/${dfproto}.base"
+  [ -f "$f" ] || return 0
+  local p; p="$(grep -vE '^[[:space:]]*(#|$)' "$f" | head -1)"
+  case "$p" in ''|@distro|*:*|*/*) return 0 ;; *) echo "$p" ;; esac
+}
+
+registry_has() { # lang -> 0 if <repo>-<lang>:<tag> is already pushed
+  local dfproto="$1"; [ "$dfproto" = "go" ] && dfproto="golang"
+  local ref="http://${REGISTRY}/v2/${NAMESPACE}/${TOOLCHAIN_REPO}-${dfproto}/manifests/${TOOLCHAIN_TAG}"
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' \
+    -H 'Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
+    -u "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" "$ref" 2>/dev/null || true)"
+  [ "$code" = "200" ]
+}
+
+changed=1
+while [ "$changed" = 1 ]; do
+  changed=0
+  for l in ${LANGS}; do
+    p="$(sibling_parent "$l")"; [ -n "$p" ] || continue
+    registry_has "$p" && continue
+    case " ${LANGS} " in
+      *" ${p} "*) ;;
+      *) LANGS="${p} ${LANGS}"; changed=1 ;;
+    esac
+  done
+done
+
 for l in ${LANGS}; do build "$l"; done
