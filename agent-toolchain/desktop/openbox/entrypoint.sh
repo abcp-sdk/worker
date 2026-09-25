@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # agent-worker desktop entrypoint — PURE X11 flavor (Xvfb + openbox + x11vnc).
 #
-#   agent-worker :48080                    (started FIRST, see below)
-#   Xvfb :99  ->  openbox  ->  x11vnc :5900  ->  websockify :6080 (noVNC)
+#   Xvfb :99  ->  D-Bus + AT-SPI2  ->  agent-worker :48080
+#                  openbox  ->  x11vnc :5900  ->  websockify :6080 (noVNC)
 #
 # Everything runs as root. tini is PID 1, so this script only needs to start the
 # stack and wait on the worker; on TERM it tears the children down.
 #
-# ORDER MATTERS: the worker comes up before the screen stack. The gateway's
-# CreateSandbox waits only 60s for :48080 to accept; the X stack is fast, but
-# starting the worker first makes readiness independent of it. Jobs inherit
-# DISPLAY (see the repo README), so a GUI job still lands on the desktop.
+# ORDER MATTERS. Xvfb comes first because at-spi2-registryd opens the X display.
+# The D-Bus/AT-SPI stack then comes up before agent-worker, so every job (which
+# inherits the worker's environment) finds a live accessibility bus. The gateway
+# waits only 60s for :48080; this bring-up is ~3s, so readiness is unaffected.
 set -Eeuo pipefail
 
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
@@ -25,6 +25,9 @@ mkdir -p /workspace /data
 # subshell, so its variables would not reach the signal handler.
 cleanup() {
   kill "${WORKER_PID:-}" \
+       "$(cat /tmp/at-spi-registry.pid 2>/dev/null)" \
+       "$(cat /tmp/at-spi-bus.pid 2>/dev/null)" \
+       "$(cat /tmp/dbus.pid 2>/dev/null)" \
        "$(cat /tmp/websockify.pid 2>/dev/null)" \
        "$(cat /tmp/x11vnc.pid 2>/dev/null)" \
        "$(cat /tmp/xterm.pid 2>/dev/null)" \
@@ -33,23 +36,69 @@ cleanup() {
 }
 trap cleanup TERM INT
 
-# --- agent-worker FIRST (foreground process; owns the container lifetime) --
+# --- accessibility stack ---------------------------------------------------
+# D-Bus session bus + the AT-SPI2 bus launcher/registry MUST be up before the
+# worker (and thus any job) starts, so an app a job launches can publish its
+# accessibility tree. `at-spi2-registryd` opens the X display, so Xvfb has to be
+# up first. The whole bring-up is ~2-3s — well inside the gateway's 60s :48080
+# readiness wait.
+#
+# The session bus address is FIXED (DBUS_SESSION_BUS_ADDRESS in the image ENV,
+# `unix:path=/tmp/agent-dbus`) rather than the random one `dbus-launch` picks:
+# the worker's jobs inherit its environment verbatim, so the address must be
+# known before the worker boots.
+bring_up_display() {
+  echo "desktop[x11]: starting Xvfb on ${DISPLAY} (${GEOMETRY})"
+  Xvfb "${DISPLAY}" -screen 0 "${GEOMETRY}" -ac -nolisten tcp >/tmp/xvfb.log 2>&1 &
+  echo $! > /tmp/xvfb.pid
+  for _ in $(seq 1 100); do
+    [ -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ] && break
+    sleep 0.1
+  done
+}
+
+bring_up_a11y() {
+  echo "desktop[x11]: starting D-Bus session bus at ${DBUS_SESSION_BUS_ADDRESS:-?}"
+  rm -f /tmp/agent-dbus
+  # dbus-daemon wants `--print-pid` to be an OPEN FD, not a path: hand it fd 4.
+  dbus-daemon --session --address="${DBUS_SESSION_BUS_ADDRESS}" \
+    --fork --print-pid=4 4>/tmp/dbus.pid >/tmp/dbus.log 2>&1
+  for _ in $(seq 1 50); do
+    [ -S /tmp/agent-dbus ] && break
+    sleep 0.1
+  done
+
+  # AT-SPI2: the bus launcher proxies org.a11y.Bus (apps/clients ask it for the
+  # private a11y bus); the registry aggregates the per-app accessible trees.
+  # Then flip the Status flags on so clients (xa11y) see the tree. Ordering and
+  # the flag writes mirror xa11y's own setup-a11y action.
+  echo "desktop[x11]: starting at-spi2 bus launcher + registry daemon"
+  /usr/libexec/at-spi-bus-launcher --launch-immediately >/tmp/at-spi-bus.log 2>&1 &
+  echo $! > /tmp/at-spi-bus.pid
+  sleep 1
+  /usr/libexec/at-spi2-registryd >/tmp/at-spi-registry.log 2>&1 &
+  echo $! > /tmp/at-spi-registry.pid
+  sleep 1
+  for prop in IsEnabled ScreenReaderEnabled; do
+    dbus-send --session --print-reply --dest=org.a11y.Bus /org/a11y/bus \
+      org.freedesktop.DBus.Properties.Set \
+      string:org.a11y.Status string:"$prop" variant:boolean:true \
+      >/dev/null 2>&1 || true
+  done
+  return 0
+}
+
+bring_up_display
+bring_up_a11y
+
+# --- agent-worker (foreground process; owns the container lifetime) -------
+# Started after the a11y stack so jobs inherit a live AT-SPI session.
 echo "desktop[x11]: starting agent-worker on :${WORKER_PORT:-48080}"
 agent-worker &
 WORKER_PID=$!
 
-# --- screen stack in the background (never blocks the worker) -------------
+# --- window manager + a terminal + screen sharing (background) ------------
 bring_up_desktop() {
-  # --- virtual X server -------------------------------------------------
-  echo "desktop[x11]: starting Xvfb on ${DISPLAY} (${GEOMETRY})"
-  Xvfb "${DISPLAY}" -screen 0 "${GEOMETRY}" -ac -nolisten tcp >/tmp/xvfb.log 2>&1 &
-  echo $! > /tmp/xvfb.pid
-
-  for _ in $(seq 1 100); do
-    [ -S "/tmp/.X11-unix/X${DISPLAY_NUM}" ] && break
-    sleep 0.2
-  done
-
   # --- window manager + a terminal so the desktop is not empty ----------
   echo "desktop[x11]: starting openbox"
   openbox >/tmp/openbox.log 2>&1 &

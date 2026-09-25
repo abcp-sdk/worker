@@ -32,6 +32,9 @@ DEST="${REGISTRY}/${NAMESPACE}/${NAME}:${TAG}"
 BUILDKIT="${BUILDKIT_ADDR:-tcp://buildkitd.agent.svc.cluster.local:1234}"
 PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
 WORKER_BIN="${WORKER_BIN:-${ROOT}/dist/agent-worker-linux-amd64}"
+# xa11y computer-use CLI (built by scripts/build-xa11y.sh). Only the X11/openbox
+# flavor ships it (the a11y tree path is X11/AT-SPI-specific).
+XA11Y_BIN="${XA11Y_BIN:-${ROOT}/dist/xa11y-linux-amd64}"
 # The image is built FROM the generic toolchain base (build-essential etc.).
 BASE_IMAGE="${BASE_IMAGE:-${REGISTRY}/agent-toolchain/toolchain-base:debian-trixie}"
 
@@ -39,6 +42,13 @@ FDIR="${DIR}/${FLAVOR}"
 for f in "${FDIR}/Containerfile" "${FDIR}/entrypoint.sh" "${WORKER_BIN}"; do
   [ -e "$f" ] || { echo "missing $f" >&2; exit 1; }
 done
+# The openbox Containerfile COPYs ./xa11y; labwc does not.
+COPY_XA11Y=""
+if grep -q 'COPY --chmod=755 ./xa11y ' "${FDIR}/Containerfile"; then
+  [ -e "${XA11Y_BIN}" ] || {
+    echo "missing ${XA11Y_BIN}; run scripts/build-xa11y.sh first" >&2; exit 1; }
+  COPY_XA11Y=1
+fi
 
 BUILDCTL="${BUILDCTL:-$(command -v buildctl || echo /opt/tools/mise/installs/aqua-moby-buildkit/0.32.2/bin/buildctl)}"
 
@@ -47,6 +57,7 @@ trap 'rm -rf "${WORK}"' EXIT
 cp "${FDIR}/Containerfile" "${WORK}/Dockerfile"
 cp "${FDIR}/entrypoint.sh" "${WORK}/"
 cp "${WORKER_BIN}" "${WORK}/agent-worker"
+if [ -n "${COPY_XA11Y}" ]; then cp "${XA11Y_BIN}" "${WORK}/xa11y"; fi
 
 echo "Building ${NAME}:${TAG} (flavor=${FLAVOR}, buildkitd=${BUILDKIT})"
 "${BUILDCTL}" --addr "${BUILDKIT}" build \
