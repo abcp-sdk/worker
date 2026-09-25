@@ -53,7 +53,13 @@ TOOLCHAIN_TAG="${TOOLCHAIN_TAG:-${DISTRO_TAG}}"
 # C/C++ toolchain (conan + clang + libc++ + llvm); it is the one image built
 # from the raw distro base (via clang.base = @distro) instead of toolchain-base,
 # because it deliberately ships WITHOUT gcc.
-WORKSPACE_LANGS="${WORKSPACE_LANGS:-node python go rust java java25 kotlin scala clojure groovy dart dotnet elixir gleam php ruby swift zig clang bun deno julia crystal ocaml haskell lua perl r conda pixi godot}"
+#
+# The ML images (cuda base + torch/vllm/vllm-omni/llamacpp/comfyui) are CUDA
+# dev images: CUDA 13.4 toolkit + cuDNN + CPython 3.13, with the runtime CUDA
+# libraries arriving via torch's `nvidia-*-cu13` wheels. They are large (multi-
+# GB) and pip-install at build time (the proxy build-args in build_image make
+# that fast); no GPU is needed to build or develop against them.
+WORKSPACE_LANGS="${WORKSPACE_LANGS:-node python go rust java java25 kotlin scala clojure groovy dart dotnet elixir gleam php ruby swift zig clang bun deno julia crystal ocaml haskell lua perl r conda pixi godot cuda torch vllm vllm-omni llamacpp comfyui}"
 
 # Artifact cache. The workspace cache hardlinks the agent-worker one and adds the
 # versions the workspace pins (node 26.9.0, JDK 26, sbt 1.13.0, zig 0.16.0).

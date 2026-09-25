@@ -59,6 +59,13 @@ p R "4.6.1" "$(curl -s https://cran.r-project.org/src/base/R-4/ | grep -oE 'R-4\
 p CMAKE "4.4.3" "$(ghl Kitware/CMake)"
 p NINJA "1.13.2" "$(ghl ninja-build/ninja)"
 p GODOT "4.7.2" "$(ghl godotengine/godot)"
+# ML/GPU dev images (PyPI + git; latest via PyPI JSON or GitHub tags).
+pj() { curl -s "https://pypi.org/pypi/$1/json" | json 'print(d["info"]["version"])'; }
+p TORCH "2.13.0" "$(pj torch)"
+p VLLM "0.28.0" "$(pj vllm)"
+p VLLM_OMNI "0.28.0" "$(pj vllm-omni)"
+p LLAMA_CPP_PY "0.3.35" "$(pj llama-cpp-python)"
+p COMFYUI "v0.37.2" "$(gh api 'repos/comfyanonymous/ComfyUI/tags?per_page=1' --jq '.[0].name' 2>/dev/null || echo '(?)')"
 # clang/libc++ come from the apt.llvm.org suite for LLVM_MAJOR (see
 # Dockerfile.clang). Query the suite's Packages index for the exact apt version
 # (the llvm-project GitHub tag is the source release, not the apt revision).

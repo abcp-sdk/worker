@@ -91,7 +91,9 @@ tail -f /tmp/wsbuild/all.log
 The language set is `WORKSPACE_LANGS` in `config.sh`:
 `node python go rust java java25 kotlin scala clojure groovy dart dotnet elixir
 gleam php ruby swift zig clang bun deno julia crystal ocaml haskell lua perl r
-conda pixi godot`.
+conda pixi godot cuda torch vllm vllm-omni llamacpp comfyui`. The last six are
+the ML/GPU **dev** images (`.base`-chained: cuda → torch → {vllm, comfyui} →
+vllm-omni, and cuda → llamacpp); see `../AGENTS.md` and `toolchain/VERSIONS.md`.
 
 ## Middleware
 

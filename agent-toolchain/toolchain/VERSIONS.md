@@ -64,6 +64,25 @@ C++26/libc++ build (CMake seeds its flags from these).
 > `libclang-rt-23-dev`, `libomp-23-dev`). `-stdlib=libc++` needs the matching
 > `libc++-<N>-dev`; libstdc++ stays available for `-stdlib=libstdc++`.
 
+## ML / GPU dev images
+
+Dev images (packages installed; not serving images). See AGENTS.md for the
+`.base` chain. Python is **3.13** here (vLLM-Omni pins `<3.14`), unlike the
+`python` language image (3.14).
+
+| tool | pinned | install | notes |
+|---|---|---|---|
+| cuda toolkit | 13.4 (`cuda-compiler-13-4`, `cuda-libraries{,-dev}-13-4`, `cuda-nvml-dev-13-4`, `cuda-command-line-tools-13-4`) | NVIDIA apt `debian13/x86_64` (cuda-keyring) | apt toolkit = nvcc/headers only; runtime libs come from pip |
+| cuDNN | 9 (`libcudnn9-dev-cuda-13`) | NVIDIA apt | |
+| python | 3.13.15 / 20260924 | python-build-standalone (`PYTHON313_URL`) | |
+| torch | 2.13.0 + torchvision 0.28.0 + torchaudio 2.11.0 | PyPI (cu13 wheels) | the triple vLLM 0.28 pins |
+| transformers / diffusers / accelerate | 5.14.1 / 0.40.0 / 1.12.0 | PyPI | |
+| vllm | 0.28.0 | PyPI (cp38-abi3 wheel) | pins the torch triple above |
+| vllm-omni | 0.28.0 | PyPI | needs `vllm` importable (plugin entry point) |
+| llama.cpp | b11182 | git source, `GGML_CUDA=ON` | |
+| llama-cpp-python | 0.3.35 | PyPI sdist, `CMAKE_ARGS=-DGGML_CUDA=on CC=gcc CXX=g++` | CC/CXX forced: python-build-standalone's sysconfig says `CC=clang` |
+| ComfyUI | v0.37.2 | git (not a real PyPI package) + its `requirements.txt` | |
+
 ## Package managers & build tools
 
 | tool | pinned | latest (checked 2026-09-18) | URL pattern | latest lookup |

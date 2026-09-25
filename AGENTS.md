@@ -35,6 +35,42 @@ OS sandboxes: `sandbox-{macos,windows,android,desktop}` with bare variant tags
 (`base`/`xcode`/`devtools`/`aosp`/`gms`/`openbox`/`labwc`), matching the lang
 trees' bare-distro tags. The repo's git tag (`v0.1.0`) carries the release.
 
+### ML / GPU dev images
+
+`cuda torch vllm vllm-omni llamacpp comfyui` are **dev images** (packages
+installed so a job can build/run ML code; they are not meant to serve). They
+chain off each other via `.base` files:
+
+```
+toolchain-cuda            (CUDA 13.4 toolkit + cuDNN 9 + CPython 3.13 + uv)
+├── toolchain-torch       (torch 2.13.0 / vision 0.28.0 / audio 2.11.0 + HF stack)
+│   ├── toolchain-vllm        (vllm 0.28.0)
+│   │   └── toolchain-vllm-omni   (vllm-omni 0.28.0)
+│   └── toolchain-comfyui     (ComfyUI v0.37.2 from git + its requirements)
+└── toolchain-llamacpp    (llama.cpp b11182 CUDA build + llama-cpp-python 0.3.35)
+```
+
+Three things to know:
+
+- **Python is 3.13, not the distro's 3.14.** vLLM-Omni pins `requires-python
+  <3.14`; the whole ML stack lags the bleeding edge. `toolchain-python` (the
+  separate language image) stays on 3.14.
+- **CUDA runtime comes from pip, not the image's apt toolkit.** `pip install
+  torch` pulls the `nvidia-*-cu13` wheels (~1.3 GiB); the apt toolkit only
+  provides `nvcc`/headers for compiling. The **host driver** (`/dev/nvidia*`,
+  `libcuda.so.1`) is never baked in — it is injected at runtime by the device
+  plugin + `nvidia` RuntimeClass.
+- **CUDA stubs are a lowest-priority ld path.** CUDA ships stub driver libs
+  (SONAME `libcuda.so.1`) so a driverless box can still link/dlopen GPU code;
+  `/etc/ld.so.conf.d/99-cuda-stubs.conf` registers them *after* the NVIDIA
+  runtime's `00-nvcr-*.conf`, so a real driver wins when one is present. That is
+  why `import torch` / `import llama_cpp` succeed with no GPU. `llama.cpp`
+  prints "CUDA driver is a stub library" on such a box — expected.
+
+To run an ML sandbox on a GPU box, call `CreateSandbox` with `gpu_count>=1`
+(the gateway then sets the `nvidia` RuntimeClass + `nvidia.com/gpu` limit).
+
+
 ### OS sandbox call parameters (CreateSandbox)
 
 The gateway exposes `kvm` and `cpu`/`memory`; the OS images need them:
