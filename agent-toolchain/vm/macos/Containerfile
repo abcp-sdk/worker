@@ -39,10 +39,13 @@ COPY disk/support/macos.sn   /storage/15/macos.sn
 COPY disk/support/macos.vars /storage/15/macos.vars
 
 # --- agent-worker boot-fetch ----------------------------------------------
-# The guest launcher downloads this on every boot (nginx :8090 /worker), so a
-# worker upgrade is an image change, not a golden-disk change. The guest disk
-# keeps a fallback copy.
+# The guest launcher downloads these on every boot (nginx :8090 /worker and
+# /xa11y.whl), so a worker/CLI upgrade is an image change, not a golden-disk
+# change. The guest disk keeps a fallback copy of the worker.
 COPY --chmod=755 agent-worker-darwin /opt/agent-worker/agent-worker
+# xa11y computer-use CLI, shipped as a prebuilt abi3 macOS wheel (the guest
+# pip-installs it; no Rust/Xcode needed).
+COPY --chmod=644 xa11y.whl /opt/agent-worker/xa11y.whl
 
 # --- token/worker bridge (no sidecar) -------------------------------------
 # /run/start.sh is sourced before the VM starts; nginx already includes

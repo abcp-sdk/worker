@@ -31,6 +31,20 @@ done
 mkdir -p "$WS"
 cd "$WROOT"
 
+# --- boot-fetch xa11y (best effort) ---------------------------------------
+# The xa11y CLI ships as a prebuilt abi3 wheel (no Rust/Xcode needed). Fetch it
+# from the pod's nginx (:8090 /xa11y.whl) and install it for docker if the CLI
+# is not already present. Failures only disable computer-use, not the worker.
+if [ ! -x /usr/local/bin/xa11y ] && [ ! -x "$WROOT/Library/Python/3.9/bin/xa11y" ]; then
+  WHL=/tmp/xa11y.whl
+  if curl -s -m 60 -o "$WHL" http://host.lan:8090/xa11y.whl 2>/dev/null && [ -s "$WHL" ]; then
+    sudo -u docker /usr/bin/pip3 install --user --no-cache-dir "$WHL" >/tmp/xa11y-install.log 2>&1 || true
+    for c in "$WROOT/Library/Python/3.9/bin/xa11y" "$WROOT/Library/Python/3.8/bin/xa11y"; do
+      [ -x "$c" ] && ln -sf "$c" /usr/local/bin/xa11y 2>/dev/null && break
+    done
+  fi
+fi
+
 # --- boot-fetch the worker (best effort; keep the disk copy) --------------
 if curl -s -m 30 -o "$DL" http://host.lan:8090/worker 2>/dev/null; then
   if [ -s "$DL" ] && [ "$(stat -f%z "$DL" 2>/dev/null || echo 0)" -gt 1000000 ]; then
@@ -49,6 +63,10 @@ if [ "$(id -un)" = "root" ]; then
   chown docker:staff "$BIN" 2>/dev/null || true
 fi
 
+# Jobs inherit the worker's environment, so put xa11y (and the pip user bin) on
+# PATH here — a launchd-spawned process gets only the bare system PATH.
+export PATH="/usr/local/bin:$WROOT/Library/Python/3.9/bin:$PATH"
+
 # Agent path: already inside docker's Aqua session.
 if [ "$(id -un)" = "docker" ]; then
   exec "$BIN" -addr 0.0.0.0:48080 -workspace "$WS" -db "$WS/jobs.db"
@@ -65,5 +83,5 @@ for _ in $(seq 1 150); do
 done
 
 # No GUI session ever appeared: run headless as docker (old behaviour).
-exec sudo -u docker --preserve-env=WORKER_TOKEN "$BIN" \
+exec sudo -u docker --preserve-env=WORKER_TOKEN,PATH "$BIN" \
   -addr 0.0.0.0:48080 -workspace "$WS" -db "$WS/jobs.db"

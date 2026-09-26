@@ -53,6 +53,28 @@ if defined DLSZ if !DLSZ! GTR 1000000 (
   move /y "%DL%" "%BIN%" >nul 2>&1 && (echo [%DATE% %TIME%] launcher: worker refreshed >nul) || set "BIN=%DL%"
 )
 
+rem --- 3b. boot-fetch the xa11y computer-use CLI onto PATH ----------------
+rem Installed under the user profile and added to PATH (machine + user) so a
+rem job's shell finds it. The guest disk may carry no copy, so a failed fetch
+rem just disables computer-use, not the worker.
+set "XDIR=%WROOT%\bin"
+set "XBIN=%XDIR%\xa11y.exe"
+set "XDL=%XDIR%\xa11y.dl.exe"
+if not exist "%XDIR%" mkdir "%XDIR%"
+curl.exe -s -m 60 -o "%XDL%" http://host.lan:8090/xa11y.exe 2>>"%LOG%"
+for %%A in ("%XDL%") do set "XSZ=%%~zA"
+if defined XSZ if !XSZ! GTR 1000000 (
+  move /y "%XDL%" "%XBIN%" >nul 2>&1 || set "XBIN=%XDL%"
+  rem Persist for future logons AND extend THIS process's PATH so the worker
+  rem (started below) and every job it runs inherit xa11y on PATH.
+  reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path /t REG_EXPAND_SZ /d "%PATH%;%XDIR%" /f >nul 2>&1
+  reg add "HKCU\Environment" /v Path /t REG_EXPAND_SZ /d "%PATH%;%XDIR%" /f >nul 2>&1
+  set "PATH=%PATH%;%XDIR%"
+  echo [%DATE% %TIME%] launcher: xa11y installed at !XBIN! >nul
+) else (
+  echo [%DATE% %TIME%] launcher: xa11y fetch failed (computer-use disabled) >>"%LOG%"
+)
+
 rem --- 4. run the worker in this (docker) session, supervised ------------
 rem The worker can exit on its own (a panic in the shell interpreter, a bad
 rem job, ...). Without a supervisor the task ends and the worker stays down

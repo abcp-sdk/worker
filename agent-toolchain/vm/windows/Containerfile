@@ -36,10 +36,13 @@ COPY disk-support/windows.ver  /storage/windows.ver
 COPY --chmod=755 vendor/run/ /run/
 
 # --- agent-worker boot-fetch ----------------------------------------------
-# The guest launcher downloads this on every boot (nginx :8090 /worker), so a
-# worker upgrade is an image change, not a golden-disk change. The guest disk
-# keeps a fallback copy.
+# The guest launcher downloads these on every boot (nginx :8090 /worker and
+# /xa11y.exe), so a worker/CLI upgrade is an image change, not a golden-disk
+# change. The guest disk keeps a fallback copy of the worker.
 COPY --chmod=755 agent-worker-windows.exe /opt/agent-worker/agent-worker
+# xa11y computer-use CLI (Windows UI Automation backend). Built by
+# scripts/build-xa11y.sh --windows; installed on PATH by the guest launcher.
+COPY --chmod=644 xa11y.exe /opt/agent-worker/xa11y.exe
 
 # --- token/worker bridge (no sidecar) -------------------------------------
 COPY --chmod=644 00-token.conf /etc/nginx/conf.d/00-token.conf

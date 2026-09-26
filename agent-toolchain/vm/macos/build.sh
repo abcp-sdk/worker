@@ -36,9 +36,12 @@ PROXY="${PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
 DISK="${DISK:-${DIR}/${VARIANT}/data.qcow2}"
 SUPPORT="${SUPPORT:-${DIR}/${VARIANT}/support}"
 WORKER_BIN="${WORKER_BIN:-${ROOT}/dist/agent-worker-darwin-amd64}"
+# xa11y computer-use CLI, shipped as a prebuilt abi3 macOS wheel (the guest
+# pip-installs it). Built/fetched by scripts/build-xa11y.sh --macos-wheel.
+XA11Y_WHL="${XA11Y_WHL:-${ROOT}/dist/xa11y-macos-amd64.whl}"
 BUILDCTL="${BUILDCTL:-$(command -v buildctl || true)}"
 
-for f in "${DIR}/Containerfile" "${DIR}/00-token.conf" "${DIR}/start.sh" "${DISK}" "${WORKER_BIN}"; do
+for f in "${DIR}/Containerfile" "${DIR}/00-token.conf" "${DIR}/start.sh" "${DISK}" "${WORKER_BIN}" "${XA11Y_WHL}"; do
   [ -e "$f" ] || { echo "missing $f" >&2; exit 1; }
 done
 [ -d "${SUPPORT}" ] || { echo "missing support dir ${SUPPORT}" >&2; exit 1; }
@@ -50,6 +53,7 @@ mkdir -p "${WORK}/disk/support"
 cp "${DIR}/Containerfile" "${WORK}/Dockerfile"
 cp "${DIR}/00-token.conf" "${DIR}/start.sh" "${WORK}/"
 cp "${WORKER_BIN}" "${WORK}/agent-worker-darwin"
+cp "${XA11Y_WHL}" "${WORK}/xa11y.whl"
 cp -r "${DIR}/vendor" "${WORK}/vendor"
 ln "${DISK}" "${WORK}/disk/data.qcow2" 2>/dev/null || cp "${DISK}" "${WORK}/disk/data.qcow2"
 # Boot support only; base.dmg (install media) is not shipped (see Containerfile).
