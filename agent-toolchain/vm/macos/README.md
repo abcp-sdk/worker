@@ -9,7 +9,7 @@ the LaunchAgent/LaunchDaemon. No upstream sandbox image is referenced.
 
 - `Containerfile` — self-owned runtime: `FROM <registry>/qemu:750`, the OpenCore
   boot-image rebuild tools, the vendored boot scripts, the pre-baked disk +
-  boot support, the boot-fetched worker + xa11y wheel, and the token bridge.
+  boot support, the boot-fetched worker + xa11y binary, and the token bridge.
 - `build.sh` — build + push (buildkitd → skopeo → the registry). Variants:
   `base` and `xcode`.
 - `repack-disk.sh` — shrink the disk layer (defrag + long-window zstd).
@@ -17,37 +17,57 @@ the LaunchAgent/LaunchDaemon. No upstream sandbox image is referenced.
   OpenCore/VMHide archives.
 - `guest/` — files baked *into the guest disk*:
   - `worker-launch.sh` — fetches `WORKER_TOKEN`, boot-fetches the worker from
-    `host.lan:8090/worker`, installs the xa11y wheel from `/xa11y.whl`, and
+    `host.lan:8090/worker` and the xa11y binary from `/xa11y`, grants TCC, and
     starts the worker in docker's Aqua session.
   - `bake-guest.sh` — one-time bake: passwordless sudo, launchd units,
-    auto-login, xa11y install + Accessibility (TCC) grant.
+    auto-login.
 
 ## computer-use (xa11y)
 
-The guest installs the **xa11y** CLI from a prebuilt abi3 wheel (nginx
-`:8090 /xa11y.whl`; no Rust/Xcode needed) and drives native apps through
-AXUIElement. Three things make this work and all are baked into the golden
-disk:
+The guest runs a **self-contained xa11y Mach-O binary** (nginx `:8090 /xa11y`)
+and drives native apps through AXUIElement. It links only system frameworks
+(`/System/Library/Frameworks/*`, `/usr/lib/libSystem.B.dylib`), so the sandbox
+needs **no Command Line Tools and no Python** — earlier iterations shipped the
+prebuilt Python wheel, which forced a full CLT install (+~2.4 GiB).
+
+Two things make it work, both baked into the golden disk:
 
 1. **SIP off.** `config.plist` sets `csr-active-config=0x7f` AND lists
    `csr-active-config` under NVRAM/`Delete`, so the stale `0x00` in the
    pre-baked `macos.vars` no longer wins. Changing `config.plist` changes
    `openCoreSignature()`, so `boot.sh` rebuilds the OpenCore image on boot —
    which is why the Containerfile installs `xmlstarlet mtools file zip`.
-2. **Command Line Tools.** The guest `/usr/bin/python3` is a CLT shim, so the
-   wheel cannot be installed/run without them. `softwareupdate -i "Command
-   Line Tools for Xcode-16.4"` installs them into the golden disk.
-3. **TCC Accessibility.** The interpreter running the wheel needs
-   `kTCCServiceAccessibility`. The grant is only possible with SIP off (the TCC
-   db is SIP-protected); `bake-guest.sh` inserts it.
+2. **TCC Accessibility + ScreenCapture.** macOS attributes the permission to
+   the RESPONSIBLE process, so the launcher (running as root, with SIP off and
+   a writable TCC db) grants it to the worker AND to xa11y itself on every
+   boot. No CLT/Python is involved.
 
-## Building
+### Building the xa11y binary
+
+macOS cannot be cross-compiled (Apple frameworks + Objective-C). There is no
+prebuilt CLI binary upstream, so build it once inside a throwaway macOS guest
+and stage the result into `dist/`:
+
+```sh
+# boot a scratch copy of the sandbox-macos:base disk as a KVM pod, then in-guest:
+softwareupdate -i "Command Line Tools for Xcode-16.4"        # compile-time only
+curl -sL https://static.rust-lang.org/dist/2026-07-16/rust-1.97.1-x86_64-apple-darwin.tar.xz \
+  | tar -xJ -C /tmp/rust --strip-components=1 && /tmp/rust/install.sh --prefix=/Users/docker/rust --without=rust-docs
+curl -sL https://codeload.github.com/xa11y/xa11y/tar.gz/refs/tags/v0.15.0 | tar -xz -C /tmp/xa11y --strip-components=1
+cd /tmp/xa11y && RUSTC=/Users/docker/rust/bin/rustc PATH=/Users/docker/rust/bin:$PATH \
+  /Users/docker/rust/bin/cargo build --release -p xa11y --bin xa11y   # ~13 min
+# extract target/release/xa11y to dist/xa11y-darwin-amd64
+```
+
+The CLT/Rust live only in that throwaway guest — the sandbox disk is untouched.
+
+## Building the image
 
 ```sh
 # stage (git-ignored): agent-toolchain/vm/macos/<variant>/data.qcow2
 #                      agent-toolchain/vm/macos/<variant>/support/
 scripts/build-all.sh                        # dist/agent-worker-darwin-amd64
-scripts/build-xa11y.sh macos-wheel          # dist/xa11y-macos-amd64.whl
+scripts/build-xa11y.sh macos                # checks dist/xa11y-darwin-amd64
 ./agent-toolchain/vm/macos/build.sh base
 ./agent-toolchain/vm/macos/build.sh xcode
 
@@ -61,6 +81,6 @@ The golden disk can be extracted straight from the published image (no
 node-local copy needed): `skopeo copy docker://…/sandbox-macos:base dir:…`,
 then `zstd -d | tar -x` the largest layer (`storage/15/data.qcow2`) and the
 small `disk/support/*` layers (`storage/15/macos.*`). To rebake, boot that disk
-as a hostPath `/storage` (a KVM pod on the image's node), run `bake-guest.sh`,
-verify `xa11y apps`, shut down, defrag, then build a fresh image and push it
-(see the `:a11y` tag).
+as a hostPath `/storage` (a KVM pod on the image's node), write the new
+launcher into the guest, verify `xa11y apps` after a reboot, shut down, defrag,
+then build a fresh image and push it (see the `:a11y` tag).

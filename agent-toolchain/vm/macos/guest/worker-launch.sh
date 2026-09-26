@@ -10,13 +10,19 @@
 #   2. boot-fetch the current agent-worker binary from
 #      http://host.lan:8090/worker (so a worker upgrade is an image change,
 #      not a golden-disk change), falling back to the baked copy
-#   3. start agent-worker inside docker's GUI session
+#   3. boot-fetch the xa11y computer-use CLI from http://host.lan:8090/xa11y
+#      and grant it the Accessibility (TCC) permission (SIP is off in this
+#      image, so the TCC db is writable) — done as root before the worker
+#   4. start agent-worker inside docker's GUI session
 set -Eeuo pipefail
 
 WROOT=/Users/docker
 BIN="$WROOT/agent-worker-darwin"
 DL="$WROOT/agent-worker-darwin.dl"
 WS="$WROOT/ewws"
+XA="$WROOT/xa11y"
+XA_BIN=/usr/local/bin/xa11y
+TCC="/Library/Application Support/com.apple.TCC/TCC.db"
 
 TOKEN=""
 for _ in $(seq 1 60); do
@@ -32,18 +38,17 @@ mkdir -p "$WS"
 cd "$WROOT"
 
 # --- boot-fetch xa11y (best effort) ---------------------------------------
-# The xa11y CLI ships as a prebuilt abi3 wheel (no Rust/Xcode needed). Fetch it
-# from the pod's nginx (:8090 /xa11y.whl) and install it for docker if the CLI
-# is not already present. Failures only disable computer-use, not the worker.
-if [ ! -x /usr/local/bin/xa11y ] && [ ! -x "$WROOT/Library/Python/3.9/bin/xa11y" ]; then
-  WHL=/tmp/xa11y.whl
-  if curl -s -m 60 -o "$WHL" http://host.lan:8090/xa11y.whl 2>/dev/null && [ -s "$WHL" ]; then
-    sudo -u docker /usr/bin/pip3 install --user --no-cache-dir "$WHL" >/tmp/xa11y-install.log 2>&1 || true
-    for c in "$WROOT/Library/Python/3.9/bin/xa11y" "$WROOT/Library/Python/3.8/bin/xa11y"; do
-      [ -x "$c" ] && ln -sf "$c" /usr/local/bin/xa11y 2>/dev/null && break
-    done
-  fi
+# The CLI is a self-contained Mach-O binary (built from source; needs only
+# system frameworks — no CLT, no Python). Install it and grant Accessibility so
+# it can read/drive other apps' accessibility trees. Failures only disable
+# computer-use, not the worker.
+if curl -s -m 60 -o "$XA.dl" http://host.lan:8090/xa11y 2>/dev/null && [ -s "$XA.dl" ]; then
+  chmod 755 "$XA.dl"
+  mv -f "$XA.dl" "$XA" 2>/dev/null || true
 fi
+# /usr/local/bin may not exist on a fresh disk; create it and link xa11y.
+mkdir -p /usr/local/bin 2>/dev/null || true
+[ -x "$XA" ] && ln -sf "$XA" "$XA_BIN" 2>/dev/null || true
 
 # --- boot-fetch the worker (best effort; keep the disk copy) --------------
 if curl -s -m 30 -o "$DL" http://host.lan:8090/worker 2>/dev/null; then
@@ -56,16 +61,29 @@ if curl -s -m 30 -o "$DL" http://host.lan:8090/worker 2>/dev/null; then
 fi
 [ -x "$BIN" ] || BIN="$WROOT/agent-worker-v0.5.2"
 
+# --- grant TCC (Accessibility + ScreenCapture), now that both paths exist ---
+# macOS attributes the permission to the RESPONSIBLE process: for a job that is
+# the worker (which forks xa11y), and for xa11y itself when run directly. Grant
+# all three paths. Only possible with SIP off (the TCC db is SIP-protected).
+if [ "$(id -un)" = "root" ] && [ -w "$TCC" ] && [ -x /usr/bin/sqlite3 ]; then
+  for client in "$XA" "$XA_BIN" "$BIN"; do
+    for svc in kTCCServiceAccessibility kTCCServiceScreenCapture; do
+      sqlite3 "$TCC" "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) VALUES('$svc','$client',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,strftime('%s','now'));" 2>/dev/null || true
+    done
+  done
+  launchctl stop com.apple.tccd 2>/dev/null || true
+fi
+
 # The daemon path runs as root; hand the workspace + binaries to docker so the
 # worker (which runs as docker) can write its sqlite DB.
 if [ "$(id -un)" = "root" ]; then
   chown -R docker:staff "$WS" 2>/dev/null || true
-  chown docker:staff "$BIN" 2>/dev/null || true
+  chown docker:staff "$BIN" "$XA" 2>/dev/null || true
 fi
 
-# Jobs inherit the worker's environment, so put xa11y (and the pip user bin) on
-# PATH here — a launchd-spawned process gets only the bare system PATH.
-export PATH="/usr/local/bin:$WROOT/Library/Python/3.9/bin:$PATH"
+# Jobs inherit the worker's environment, so put xa11y on PATH here — a
+# launchd-spawned process gets only the bare system PATH.
+export PATH="/usr/local/bin:$PATH"
 
 # Agent path: already inside docker's Aqua session.
 if [ "$(id -un)" = "docker" ]; then

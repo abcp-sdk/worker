@@ -78,46 +78,11 @@ sysadminctl -autologin set -userName docker -password admin \
   -adminUser docker -adminPassword admin 2>&1 | tail -2 || true
 defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string docker 2>/dev/null || true
 
-############ 5b. xa11y computer-use CLI (install from a prebuilt wheel)
-# xa11y ships a prebuilt abi3 macOS wheel that BUNDLES the CLI, so no Rust
-# toolchain and no Xcode are needed to install it (unlike building from
-# source). The wheel is placed at /tmp/xa11y.whl by the bake driver (fetched
-# on the host); if absent, try PyPI. Installed for the docker user so its
-# console script lands in docker's user bin, then symlinked into /usr/local/bin
-# so a job's shell finds it on PATH.
-XA11Y_BIN=""
-if [ -f /tmp/xa11y.whl ]; then
-  sudo -u docker /usr/bin/pip3 install --user --no-cache-dir /tmp/xa11y.whl 2>&1 | tail -2 || true
-fi
-for c in "$WROOT/Library/Python/3.9/bin/xa11y" "$WROOT/Library/Python/3.8/bin/xa11y"; do
-  [ -x "$c" ] && XA11Y_BIN="$c" && break
-done
-if [ -n "$XA11Y_BIN" ]; then
-  ln -sf "$XA11Y_BIN" /usr/local/bin/xa11y
-  echo "xa11y installed: $XA11Y_BIN"
-else
-  echo "WARNING: xa11y wheel not installed (computer-use disabled)"
-fi
-
-# The Accessibility (TCC) permission the CLI needs cannot be granted from a
-# script while SIP is on (the TCC db is SIP-protected). The bake driver must
-# boot the guest with csr-active-config=0x7f (see vendor/assets/config.plist
-# NVRAM/csr-active-config) and then insert the grant below; this script does it
-# only if the db is writable (i.e. SIP is off).
-TCC="/Library/Application Support/com.apple.TCC/TCC.db"
-if sqlite3 "$TCC" "SELECT 1" >/dev/null 2>&1; then
-  # Grant Accessibility to the python interpreter that runs xa11y (the client
-  # process TCC attributes the request to).
-  PY="$(head -1 "$XA11Y_BIN" 2>/dev/null | sed 's/^#!//')"
-  for client in "${PY:-/usr/bin/python3}" /usr/local/bin/xa11y; do
-    sqlite3 "$TCC" "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) VALUES('kTCCServiceAccessibility','$client',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,strftime('%s','now'));" 2>/dev/null \
-      && echo "TCC Accessibility granted to $client" \
-      || echo "WARNING: could not grant TCC to $client"
-  done
-  launchctl stop com.apple.tccd 2>/dev/null || true
-else
-  echo "NOTE: TCC db not writable (SIP on) — Accessibility must be granted with SIP off"
-fi
+############ 5b. xa11y is boot-fetched by worker-launch.sh, not baked here
+# The xa11y CLI is a self-contained Mach-O binary served by the image at nginx
+# :8090 /xa11y; worker-launch.sh fetches it, links it into /usr/local/bin, and
+# grants TCC on every boot. Nothing is installed into the disk at bake time, so
+# the guest needs no Command Line Tools and no Python.
 
 ############ 6. verify
 echo "== sudoers =="; visudo -c -f "$SUDOERS"
@@ -125,5 +90,4 @@ echo "== autologin =="; sysadminctl -autologin status 2>&1 | tail -1
 echo "== daemon =="; plutil -lint "$DAEMON"
 echo "== agent =="; plutil -lint "$AGENT"
 echo "== launcher =="; ls -la "$LAUNCHER"
-echo "== xa11y =="; ls -la /usr/local/bin/xa11y 2>/dev/null || echo "(not installed)"
 echo BAKE_GUEST_OK
