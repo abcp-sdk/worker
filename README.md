@@ -214,13 +214,19 @@ The VM pods then request it as an extended resource and stay unprivileged:
 securityContext:
   privileged: false
   capabilities:
-    add: ["NET_ADMIN","SYS_ADMIN","MKNOD", ...]   # no privileged, no ALL
+    add: ["NET_ADMIN","NET_RAW","SYS_NICE","MKNOD", ...]   # no SYS_ADMIN, no privileged, no ALL
 resources:
   limits:
     squat.ai/kvm: "1"        # <- delivers /dev/kvm
 volumeMounts:
   - { name: devtun, mountPath: /dev/net/tun }     # on the default allow-list
 ```
+
+`SYS_ADMIN` is deliberately NOT required: verified on this deployment that the
+macOS / Windows / Android images boot under QEMU and bring up NAT networking
+with only `NET_ADMIN` + `MKNOD` (+ `NET_RAW`/`SYS_NICE`/ownership caps). The
+earlier `SYS_ADMIN` was a conservative upstream default; it also enables
+container escape on a shared node, so it was dropped.
 
 Apply order:
 

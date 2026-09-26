@@ -42,7 +42,7 @@ spec:
             seccompProfile: { type: Unconfined }
             appArmorProfile: { type: Unconfined }
             capabilities:
-              add: ["NET_ADMIN","NET_RAW","SYS_ADMIN","SYS_NICE","MKNOD",
+              add: ["NET_ADMIN","NET_RAW","SYS_NICE","MKNOD",
                     "CHOWN","SETUID","SETGID","DAC_OVERRIDE","FOWNER","KILL"]
 
           ports:
