@@ -1038,7 +1038,7 @@
 					<key>boot-args</key>
 					<string>keepsyms=1 debug=0x100 -lilubeta -wegbeta vmhState=enabled</string>
 					<key>csr-active-config</key>
-					<data>AAAAAA==</data>
+					<data>fwAAAA==</data>
 					<key>prev-lang:kbd</key>
 					<data>ZW4tVVM6MA==</data>
 					<key>run-efi-updater</key>
@@ -1058,6 +1058,7 @@
 				<key>7C436110-AB2A-4BBB-A880-FE41995C9F82</key>
 				<array>
 					<string>boot-args</string>
+					<string>csr-active-config</string>
 					<string>ForceDisplayRotationInEFI</string>
 				</array>
 			</dict>

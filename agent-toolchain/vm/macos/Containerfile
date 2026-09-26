@@ -13,6 +13,24 @@
 ARG REGISTRY=git.agent.svc.cluster.local/root
 FROM ${REGISTRY}/qemu:750
 
+# --- OpenCore boot-image rebuild tools -------------------------------------
+# The boot image is normally reused as-is, but a change to /assets/config.plist
+# (e.g. csr-active-config to disable SIP for computer-use) changes
+# openCoreSignature() and forces boot.sh to REBUILD the OpenCore image, which
+# needs: xmlstarlet (plist edit/validate/select), xxd (ROM hex->binary),
+# mtools (mformat/mcopy the EFI FAT image) and 7z (unpack opencore.iso /
+# vmh.zip). The upstream installer image carries these; this boot-only image
+# must add them.
+RUN set -eux; \
+    echo "apt via ${HTTP_PROXY:-direct}"; \
+    apt-get -o Acquire::Retries=10 update; \
+    for i in 1 2 3 4 5 6; do \
+      apt-get -o Acquire::Retries=10 install -y --no-install-recommends \
+        xmlstarlet mtools file zip \
+      && break || { echo "apt retry $i"; sleep 3; }; \
+    done; \
+    rm -rf /var/lib/apt/lists/*
+
 # --- vendored macOS runtime ------------------------------------------------
 # The boot scripts (entry/boot/cpu/disk/display/network/install/...).
 COPY --chmod=755 vendor/run/ /run/
