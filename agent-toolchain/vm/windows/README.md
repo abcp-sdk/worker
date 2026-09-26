@@ -56,3 +56,19 @@ qemu-img convert -f qcow2 -O qcow2 -o cluster_size=1M,lazy_refcounts=on \
 The guest disk is rebuilt by booting the previous image's disk (hostPath-backed
 so changes persist), running `guest/install-worker.cmd` inside it, then
 committing and defragmenting it.
+
+## computer-use (xa11y)
+
+The image serves the **xa11y** Windows CLI at nginx `:8090 /xa11y.exe` and the
+guest launcher (`guest/worker-launch.cmd`) boot-fetches it onto PATH, so a job
+can read/drive native apps through UI Automation (`xa11y apps` / `tree` /
+`find` / `action` / `screenshot`). No disk rebake is needed for a launcher or
+CLI change — only the image.
+
+The golden disk can be extracted straight from the published image (no
+node-local copy needed): `skopeo copy docker://…/sandbox-windows:base dir:…`,
+then `zstd -d | tar -x` the largest layer to get `storage/data.qcow2`, and the
+small `disk-support` layers for `storage/windows.*`. To rebake, boot that disk
+as a hostPath `/storage` (a KVM pod on the image's node), let the launcher run,
+verify `xa11y apps`, `shutdown /s`, defrag (`qemu-img convert -o
+cluster_size=1M`), then build a fresh image and push it (see the `:a11y` tag).
