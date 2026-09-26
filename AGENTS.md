@@ -99,6 +99,7 @@ left in place and becomes ready on its own).
 
 ```sh
 scripts/build-all.sh                       # 1. dist/ cross-compiled binaries (18 files)
+scripts/build-xa11y.sh fetch               #    dist/xa11y-* (computer-use CLI)
 ./agent-toolchain/fetch-artifacts.sh       # 2. cache/<distro>/* toolchain tarballs
 ./agent-toolchain/build-toolchain.sh base   # 3. toolchain images (base first!)
 ./agent-toolchain/build-toolchain.sh node python ...   #    then languages
@@ -109,6 +110,12 @@ scripts/build-all.sh                       # 1. dist/ cross-compiled binaries (1
 `dist/` and `agent-toolchain/cache/` are **gitignored and NOT committed** — a
 fresh checkout has neither. A build without the needed cache artifact fails
 loudly with the missing filename (that is by design).
+
+`dist/` binaries are published as **GitHub Releases** (never committed to git):
+`v0.1.0` holds the six `agent-worker-*` binaries; `xa11y-v0.15.0` holds the
+three `xa11y-*` CLI binaries. A fresh checkout repopulates the worker binaries
+via `scripts/build-all.sh` and the xa11y ones via
+`scripts/build-xa11y.sh fetch` (or builds them from source — see that script).
 
 VM / Android / Desktop (separate, need `dist/` staged first). All four push to
 the `sandbox` org (`NAMESPACE=sandbox` default):

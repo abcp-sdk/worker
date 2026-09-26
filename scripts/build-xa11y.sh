@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
-# Build the `xa11y` computer-use CLI (github.com/xa11y/xa11y) into dist/.
+# Fetch or build the `xa11y` computer-use CLI (github.com/xa11y/xa11y) into dist/.
 #
-# The sandbox images bake `xa11y` in so a job can read and drive native apps'
-# accessibility trees. Upstream publishes NO prebuilt CLI binaries (only
-# Python/JS wheels and crates), so it is built from source here and staged into
-# dist/, exactly like the Go worker binaries.
+# The sandbox images ship `xa11y` so a job can read and drive native apps'
+# accessibility trees. Upstream publishes NO prebuilt CLI binary (only a Python
+# wheel and a Node addon), so we produce our own:
 #
-#   scripts/build-xa11y.sh              # -> dist/xa11y-{linux,windows,macos wheel}
+#   scripts/build-xa11y.sh fetch    # download the prebuilt release assets (fast)
+#   scripts/build-xa11y.sh          # build all three from source
 #   scripts/build-xa11y.sh linux
 #   scripts/build-xa11y.sh windows
 #   scripts/build-xa11y.sh macos
+#
+# `fetch` pulls the binaries from this repo's `xa11y-v<ver>` GitHub release
+# (the same pattern as the agent-worker binaries in v0.1.0), so a fresh
+# checkout can repopulate dist/ without a compiler.
 #
 # Linux runtime deps (verified with `ldd`): glibc + libgcc +
 # libxkbcommon.so.0. The desktop image installs libxkbcommon0; D-Bus/AT-SPI/X11
@@ -20,10 +24,9 @@
 # `+crt-static`, producing a self-contained .exe that needs only Windows system
 # DLLs (no libunwind/libc++ redistributable).
 #
-# macOS is NOT cross-compiled (it needs the Apple SDK). Upstream publishes a
-# self-contained Mach-O binary built from source inside a throwaway macOS
-# guest (it links only system frameworks), so the `macos` target just checks
-# the extracted binary is present.
+# macOS is NOT cross-compiled (Apple frameworks + Objective-C need the Apple
+# SDK). It is built inside a throwaway macOS guest; the `macos` target only
+# checks the extracted binary is present (see agent-toolchain/vm/macos/README.md).
 #
 # Env:
 #   XA11Y_REPO    git URL          (default https://github.com/xa11y/xa11y)
@@ -31,6 +34,8 @@
 #   XA11Y_OUT     linux output     (default dist/xa11y-linux-amd64)
 #   XA11Y_WIN_OUT windows output   (default dist/xa11y-windows-amd64.exe)
 #   XA11Y_MAC_OUT macOS binary     (default dist/xa11y-darwin-amd64)
+#   XA11Y_RELEASE release tag      (default xa11y-v0.15.0, for `fetch`)
+#   XA11Y_BASEURL download base    (default the GitHub release URL)
 #   LLVM_MINGW_DIR  toolchain dir  (default /tmp/opencode/llvm-mingw)
 #   BUILD_PROXY   HTTP proxy       (default mihomo)
 set -euo pipefail
@@ -41,11 +46,30 @@ XA11Y_TAG="${XA11Y_TAG:-v0.15.0}"
 XA11Y_OUT="${XA11Y_OUT:-dist/xa11y-linux-amd64}"
 XA11Y_WIN_OUT="${XA11Y_WIN_OUT:-dist/xa11y-windows-amd64.exe}"
 XA11Y_MAC_OUT="${XA11Y_MAC_OUT:-dist/xa11y-darwin-amd64}"
+XA11Y_RELEASE="${XA11Y_RELEASE:-xa11y-v0.15.0}"
+XA11Y_BASEURL="${XA11Y_BASEURL:-https://github.com/abcp-sdk/worker/releases/download/${XA11Y_RELEASE}}"
 BUILD_PROXY="${BUILD_PROXY:-http://mihomo.develop.svc.cluster.local:7890}"
 LLVM_MINGW_DIR="${LLVM_MINGW_DIR:-/tmp/opencode/llvm-mingw}"
 LLVM_MINGW_VERSION="${LLVM_MINGW_VERSION:-20260922}"
 
 WANT="${*:-linux windows macos}"
+
+fetch_one() { # <asset-name> <dest> <mode>
+  local name="$1" dest="$2" mode="$3"
+  mkdir -p "$(dirname "$dest")"
+  echo "==> fetch ${name}"
+  HTTPS_PROXY="${BUILD_PROXY}" HTTP_PROXY="${BUILD_PROXY}" \
+    curl -fSL --retry 3 -o "${dest}.part" "${XA11Y_BASEURL}/${name}"
+  chmod "$mode" "${dest}.part"
+  mv "${dest}.part" "$dest"
+  echo "==> ${dest} ($(du -h "$dest" | cut -f1))"
+}
+
+build_fetch() {
+  fetch_one xa11y-linux-amd64       "$XA11Y_OUT"     0755
+  fetch_one xa11y-windows-amd64.exe "$XA11Y_WIN_OUT" 0644
+  fetch_one xa11y-darwin-amd64      "$XA11Y_MAC_OUT" 0755
+}
 
 CARGO="$(command -v cargo || true)"
 [ -n "$CARGO" ] || { echo "cargo not found (need rust >= 1.88)" >&2; exit 1; }
@@ -140,9 +164,10 @@ build_macos() {
 
 for t in ${WANT}; do
   case "$t" in
+    fetch)       build_fetch ;;
     linux)       build_linux ;;
     windows)     build_windows ;;
     macos)       build_macos ;;
-    *) echo "unknown target '$t' (want linux|windows|macos)" >&2; exit 2 ;;
+    *) echo "unknown target '$t' (want fetch|linux|windows|macos)" >&2; exit 2 ;;
   esac
 done
