@@ -5,6 +5,33 @@ The agent-worker macOS (Sequoia) sandbox: a self-owned runtime (the generic
 around a pre-baked guest disk that already contains the worker, its launcher and
 the LaunchAgent/LaunchDaemon. No upstream sandbox image is referenced.
 
+## Variants
+
+| tag | contents |
+|---|---|
+| `base`  | Sequoia + worker |
+| `xcode` | + full **Xcode.app** (iOS/macOS SDKs) |
+
+### Rebaking `xcode`
+
+The xcode disk is a `base` disk plus a full Xcode install. The `.xip` is
+Apple-ID-gated on `download.developer.apple.com` (returns an "Unauthorized"
+HTML page), so the bake pulls the **same build from archive.org** — no Apple ID:
+
+```sh
+# in the guest (needs the proxy for archive.org; SIP off so xcode-select works):
+curl -fSL -x http://mihomo.develop.svc.cluster.local:7890 \
+  -o Xcode.xip https://archive.org/download/xcode-26.3/Xcode_26.3_Universal.xip
+# verify md5 against archive.org's metadata, then:
+xip --expand Xcode.xip                       # -> ./Xcode.app
+sudo mv Xcode.app /Applications/
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+```
+
+Produces Xcode 26.3 (17C529) with the full SDK set. The launcher then
+boot-fetches xa11y as on `base`, so `xcode` also has computer-use.
+
 ## Layout
 
 - `Containerfile` — self-owned runtime: `FROM <registry>/qemu:750`, the OpenCore

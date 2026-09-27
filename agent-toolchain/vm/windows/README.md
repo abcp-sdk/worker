@@ -38,6 +38,25 @@ worker and every job it spawns already hold a full **High-IL** admin token.
 | `base`     | clean Windows 11 + worker |
 | `devtools` | + Visual Studio Build Tools (MSVC) + Windows SDK + .NET SDK |
 
+### Rebaking `devtools`
+
+The devtools disk is a `base` disk plus a one-shot MSVC install, run inside the
+guest (the guest has internet + admin). Recipe:
+
+```cmd
+curl.exe -sL -o %USERPROFILE%\vs_BuildTools.exe https://aka.ms/vs/17/release/vs_BuildTools.exe
+%USERPROFILE%\vs_BuildTools.exe --quiet --wait --norestart --nocache ^
+  --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended ^
+  --add Microsoft.VisualStudio.Component.Windows11SDK.26100 ^
+  --add Microsoft.VisualStudio.Component.Windows11SDK.22621 ^
+  --add Microsoft.VisualStudio.Component.Windows81SDK
+powershell -File dotnet-install.ps1 -Channel 10.0 -InstallDir "C:\Program Files\dotnet"
+```
+
+It produces VS Build Tools 2022 (17.14.x), MSVC 14.44.x, Windows SDK
+10.0.22621 + 10.0.26100 (+ Kits 8.1) and .NET SDK 10.0.x. The launcher then
+boot-fetches xa11y as on `base`, so `devtools` also has computer-use.
+
 ## Building
 
 ```sh

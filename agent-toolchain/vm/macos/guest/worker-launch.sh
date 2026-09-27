@@ -71,7 +71,10 @@ if [ "$(id -un)" = "root" ] && [ -w "$TCC" ] && [ -x /usr/bin/sqlite3 ]; then
       sqlite3 "$TCC" "INSERT OR REPLACE INTO access(service,client,client_type,auth_value,auth_reason,auth_version,csreq,policy_id,indirect_object_identifier_type,indirect_object_identifier,indirect_object_code_identity,flags,last_modified) VALUES('$svc','$client',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,strftime('%s','now'));" 2>/dev/null || true
     done
   done
+  # A graceful `launchctl stop` is not enough: tccd caches decisions and the
+  # grant only takes effect after it is killed and relaunched by launchd.
   launchctl stop com.apple.tccd 2>/dev/null || true
+  pkill -9 tccd 2>/dev/null || true
 fi
 
 # The daemon path runs as root; hand the workspace + binaries to docker so the
