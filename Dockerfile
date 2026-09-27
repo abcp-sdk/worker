@@ -26,7 +26,10 @@ RUN go mod download
 COPY . ./
 RUN go build -trimpath -ldflags "-s -w" -o /out/agent-worker ./cmd/agent-worker
 
-FROM ${REGISTRY}/alpine:3.24
+# Debian trixie toolchain base: build-essential + git/jq/curl/procps/less, so
+# the sandbox can compile and install packages out of the box. ca-certificates
+# and curl already ship with the base.
+FROM ${REGISTRY}/debian-toolchain-base:trixie
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
@@ -35,10 +38,6 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
     NO_PROXY=localhost,127.0.0.1,.svc.cluster.local,.svc,.fenjin.org,10.199.64.20 \
     no_proxy=localhost,127.0.0.1,.svc.cluster.local,.svc,.fenjin.org,10.199.64.20
-# Install ca-certificates/curl directly through the build proxy — the official
-# Alpine CDN is left untouched (no mirror swap). apk honors the LOWERCASE
-# http_proxy/https_proxy variables.
-RUN apk add --no-cache ca-certificates curl
 COPY --from=build /out/agent-worker /usr/local/bin/agent-worker
 # Default workspace is ~/workspace (the binary's own default); create it.
 RUN mkdir -p /root/workspace /data
