@@ -94,6 +94,10 @@ d, idx, newhex, newsz, cfghex, diff = sys.argv[1:7]
 idx = int(idx)
 mp = os.path.join(d, "manifest.json")
 m = json.load(open(mp))
+# A zstd layer only exists in the OCI media-type world; switch the manifest and
+# config to OCI (skopeo refuses an OCI zstd layer inside a docker v2s2 manifest).
+m["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
+m["config"]["mediaType"] = "application/vnd.oci.image.config.v1+json"
 m["layers"][idx] = {"mediaType": "application/vnd.oci.image.layer.v1.tar+zstd",
                     "size": int(newsz), "digest": "sha256:" + newhex}
 cfgp = os.path.join(d, cfghex)
@@ -113,7 +117,7 @@ PY
 
 echo
 echo "===== 6. push $DSTTAG ====="
-skopeo copy --dest-tls-verify=false --dest-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
+skopeo copy --format oci --dest-tls-verify=false --dest-creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" \
   "dir:$W/img" "docker://$REF:$DSTTAG"
 skopeo inspect --creds "${FORGEJO_USER:-root}:${FORGEJO_PASS:-devpassword}" --tls-verify=false \
   "docker://$REF:$DSTTAG" | grep '"Digest"' | head -1
