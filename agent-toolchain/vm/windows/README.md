@@ -35,8 +35,11 @@ worker and every job it spawns already hold a full **High-IL** admin token.
 
 | tag | contents |
 |---|---|
-| `base`     | clean Windows 11 + worker |
+| `base`     | clean Windows 11 + worker + computer-use (xa11y) |
 | `devtools` | + Visual Studio Build Tools (MSVC) + Windows SDK + .NET SDK |
+
+Both tags carry computer-use: the disk launcher boot-fetches `xa11y.exe` onto
+PATH.
 
 ### Rebaking `devtools`
 
@@ -90,4 +93,4 @@ then `zstd -d | tar -x` the largest layer to get `storage/data.qcow2`, and the
 small `disk-support` layers for `storage/windows.*`. To rebake, boot that disk
 as a hostPath `/storage` (a KVM pod on the image's node), let the launcher run,
 verify `xa11y apps`, `shutdown /s`, defrag (`qemu-img convert -o
-cluster_size=1M`), then build a fresh image and push it (see the `:a11y` tag).
+cluster_size=1M`), then build a fresh image and push it as `base`.

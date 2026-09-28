@@ -9,8 +9,11 @@ the LaunchAgent/LaunchDaemon. No upstream sandbox image is referenced.
 
 | tag | contents |
 |---|---|
-| `base`  | Sequoia + worker |
+| `base`  | Sequoia + worker + computer-use (xa11y) |
 | `xcode` | + full **Xcode.app** (iOS/macOS SDKs) |
+
+Both tags carry computer-use: the disk launcher boot-fetches the `xa11y` binary
+and grants the Accessibility (TCC) permission.
 
 ### Rebaking `xcode`
 
@@ -110,4 +113,4 @@ then `zstd -d | tar -x` the largest layer (`storage/15/data.qcow2`) and the
 small `disk/support/*` layers (`storage/15/macos.*`). To rebake, boot that disk
 as a hostPath `/storage` (a KVM pod on the image's node), write the new
 launcher into the guest, verify `xa11y apps` after a reboot, shut down, defrag,
-then build a fresh image and push it (see the `:a11y` tag).
+then build a fresh image and push it as `base`.

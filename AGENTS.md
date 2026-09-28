@@ -75,12 +75,17 @@ To run an ML sandbox on a GPU box, call `CreateSandbox` with `gpu_count>=1`
 
 The gateway exposes `kvm` and `cpu`/`memory`; the OS images need them:
 
-| image | kvm | cpu/memory | notes |
-|---|---|---|---|
-| `sandbox/sandbox-desktop:{openbox,labwc}` | no | default fine | screen stack + noVNC; worker starts first |
-| `sandbox/sandbox-android:{aosp,gms}` | **yes** | ≥4 / ≥8Gi | worker starts first; emulator boots in the background, so jobs must `adb wait-for-device` |
-| `sandbox/sandbox-windows:{base,devtools}` | **yes** | 8 / 32Gi | guest RAM/CPU come from the image ENV; the pod must be sized above them |
-| `sandbox/sandbox-macos:{base,xcode}` | **yes** | 4 / 16Gi | same |
+| image | kvm | cpu/memory | computer-use | notes |
+|---|---|---|---|---|
+| `sandbox/sandbox-desktop:openbox` | no | default fine | **yes** (xa11y + AT-SPI2) | screen stack + noVNC; worker starts first |
+| `sandbox/sandbox-desktop:labwc` | no | default fine | no | pure Wayland; no X11 a11y path |
+| `sandbox/sandbox-android:{aosp,gms}` | **yes** | ≥4 / ≥8Gi | adb/uiautomator | worker starts first; emulator boots in the background, so jobs must `adb wait-for-device` |
+| `sandbox/sandbox-windows:{base,devtools}` | **yes** | 8 / 32Gi | **yes** (UIA, boot-fetched) | guest RAM/CPU come from the image ENV; the pod must be sized above them |
+| `sandbox/sandbox-macos:{base,xcode}` | **yes** | 4 / 16Gi | **yes** (AXUIElement, boot-fetched) | same |
+
+Only `sandbox-desktop:openbox` carries a11y on Linux; the `sandbox-<lang>`
+language images do not. Windows/macOS boot-fetch `xa11y` from the image's nginx
+`:8090`, so every tag carries computer-use.
 
 The gateway's `CreateSandbox` waits only **60s** for `:48080`. The linux/desktop
 images are ready in seconds; the VM/Android sandboxes boot a guest first, so the
