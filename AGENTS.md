@@ -145,7 +145,12 @@ possible, not a rebuild.
 - `scripts/retag.sh <src-repo> <src-tag> <dst-repo> <dst-tag>` re-tags within
   the registry via cross-repo blob mount (no bytes re-uploaded) — used to move
   the catalog to the unified names without rebuilding the multi-GB VM disks.
-- ghcr mirror (optional, user-owned): `ghcr.io/silvermelon233`.
+- ghcr mirror (optional, user-owned): `ghcr.io/silvermelon233`, mirrored by
+  `scripts/distribute-ghcr.sh` (`GH_PASS=<pat> ./scripts/distribute-ghcr.sh`).
+  Every image is tagged `v0.1.0`; multi-variant repos keep the canonical variant
+  under the plain name and others under a suffixed name
+  (`sandbox-macos-xcode`, `sandbox-windows-devtools`, `sandbox-desktop-labwc`,
+  `sandbox-android-gms`).
 
 ## Known gotcha: `fetch-artifacts.sh` provenance
 
