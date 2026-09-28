@@ -66,6 +66,9 @@ spec:
             - { name: DISK_FMT, value: "qcow2" }
             - { name: MANUAL, value: "N" }
             - { name: SAMBA, value: "N" }
+            # Pin the display mode so all sandboxes agree (1920x1080). The
+            # macOS and Linux sandboxes are set to the same resolution.
+            - { name: ARGUMENTS, value: "-global virtio-vga.xres=1920 -global virtio-vga.yres=1080" }
 
           resources:
             requests: { cpu: "8", memory: "32Gi" }

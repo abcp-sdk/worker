@@ -61,7 +61,7 @@ spec:
             - { name: WORKER_DB, value: "/data/jobs.db" }
             # Screen size. The X11 flavor uses WxHxD; the Wayland flavor ignores
             # the depth component (WxH is enough).
-            - { name: SCREEN_GEOMETRY, value: "1280x720x24" }
+            - { name: SCREEN_GEOMETRY, value: "1920x1080x24" }
 
           readinessProbe:
             httpGet: { path: /healthz, port: 48080 }

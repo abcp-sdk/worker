@@ -70,7 +70,7 @@ ENV WORKER_PORT=48080 \
     WORKER_DB=/data/jobs.db \
     WAYLAND_DISPLAY=wayland-0 \
     XDG_RUNTIME_DIR=/tmp/xdg \
-    SCREEN_GEOMETRY=1280x720
+    SCREEN_GEOMETRY=1920x1080
 
 EXPOSE 48080 6080
 ENTRYPOINT ["/usr/bin/tini", "-s", "/usr/local/bin/entrypoint.sh"]

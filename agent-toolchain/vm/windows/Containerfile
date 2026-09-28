@@ -53,6 +53,9 @@ COPY --chmod=644 guest/ewelevate.cmd     /opt/agent-worker/ewelevate.cmd
 COPY --chmod=644 00-token.conf /etc/nginx/conf.d/00-token.conf
 COPY --chmod=755 start.sh      /run/start.sh
 
+# Pin the virtio-vga mode. Without this the Windows driver picks its own
+# default (1280x800), which disagrees with the Linux (Xvfb) and macOS
+# (OpenCore/OVMF) sandboxes that are set to 1920x1080.
 ENV VERSION=win11 \
     EDITION=pro \
     CPU_CORES=8 \
@@ -61,7 +64,8 @@ ENV VERSION=win11 \
     DISK_FMT=qcow2 \
     MANUAL=N \
     SAMBA=N \
-    USER_PORTS=48080
+    USER_PORTS=48080 \
+    ARGUMENTS="-global virtio-vga.xres=1920 -global virtio-vga.yres=1080"
 
 VOLUME /storage
 EXPOSE 3389 8006 22 48080 8090

@@ -61,6 +61,11 @@ spec:
             - { name: RAM_SIZE, value: "16384M" }
             - { name: DISK_SIZE, value: "128G" }    # >= baked disk size
             - { name: MANUAL, value: "N" }
+            # Display mode baked into the OpenCore config.plist + OVMF vars.
+            # These match the image's build defaults (and the Linux/Windows
+            # sandboxes), so the pre-built boot image signature is unchanged.
+            - { name: WIDTH, value: "1920" }
+            - { name: HEIGHT, value: "1080" }
 
           resources:
             requests: { cpu: "4", memory: "16Gi" }

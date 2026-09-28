@@ -83,7 +83,7 @@ ENV WORKER_PORT=48080 \
     WORKER_WORKSPACE=/workspace \
     WORKER_DB=/data/jobs.db \
     DISPLAY=:99 \
-    SCREEN_GEOMETRY=1280x720x24 \
+    SCREEN_GEOMETRY=1920x1080x24 \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/agent-dbus \
     NO_AT_BRIDGE=0 \
     AT_SPI_CLIENT=true \
