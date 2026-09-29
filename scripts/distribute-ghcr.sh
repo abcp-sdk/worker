@@ -71,7 +71,7 @@ sandbox/sandbox-swift:debian-trixie:sandbox-swift
 sandbox/sandbox-torch:debian-trixie:sandbox-torch
 sandbox/sandbox-vllm:debian-trixie:sandbox-vllm
 sandbox/sandbox-vllm-omni:debian-trixie:sandbox-vllm-omni
-sandbox/sandbox-windows:20260928:sandbox-windows
+sandbox/sandbox-windows:base:sandbox-windows
 sandbox/sandbox-windows:devtools:sandbox-windows-devtools
 sandbox/sandbox-zig:debian-trixie:sandbox-zig
 "
