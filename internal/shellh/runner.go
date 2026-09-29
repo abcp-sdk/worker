@@ -96,7 +96,7 @@ func (r *Runner) run(ctx context.Context, command, workdir string, env []string,
 		interp.Dir(cwd),
 		interp.Env(expand.ListEnviron(env...)),
 		interp.StdIO(stdin, stdout, stderr),
-		interp.ExecHandlers(r.execMiddleware(env)),
+		interp.ExecHandlers(r.execMiddleware()),
 		interp.OpenHandler(r.openHandler()),
 	)
 	if err != nil {
@@ -284,18 +284,59 @@ func (lb *LineBuffer) Tail(n int) string {
 // file; nil elsewhere). Temporary diagnostic aid for the kill-latency hunt.
 var Debugf = func(format string, args ...interface{}) {}
 
-func (r *Runner) execMiddleware(env []string) func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+// childEnv flattens the interpreter's live environment into the "name=value"
+// list a child process receives. Only exported string variables are included;
+// an unset shadowing variable blanks any earlier entry of the same name. This
+// mirrors mvdan's unexported interp.execEnv so the child sees exactly what the
+// shell sees (base env + per-job env + inline assignments + exports).
+func childEnv(env expand.Environ) []string {
+	list := make([]string, 0, 64)
+	env.Each(func(name string, vr expand.Variable) bool {
+		if !vr.IsSet() {
+			// Set in a parent scope but unset here: ensure it is not exported.
+			for i, kv := range list {
+				if strings.HasPrefix(kv, name+"=") {
+					list[i] = ""
+				}
+			}
+		}
+		if vr.Exported && vr.Kind == expand.String {
+			list = append(list, name+"="+vr.String())
+		}
+		return true
+	})
+	return list
+}
+
+func (r *Runner) execMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
 			hc := interp.HandlerCtx(ctx)
 			if len(args) == 0 {
 				return interp.ExitStatus(1)
 			}
-			name, argv := prepareExec(args[0], args[1:])
+			// Resolve the program through the SCRIPT's PATH (hc.Env), not the
+			// worker process's PATH, so `export PATH=...` and inline `PATH=...`
+			// affect which binary runs (mirrors mvdan's DefaultExecHandler).
+			resolved, err := interp.LookPathDir(hc.Dir, hc.Env, args[0])
+			if err != nil {
+				fmt.Fprintln(hc.Stderr, err)
+				return interp.ExitStatus(127)
+			}
+			name, argv := prepareExec(resolved, args[1:])
 
 			cmd := exec.CommandContext(ctx, name, argv...)
+			// Preserve the invoked name as argv[0] (busybox/git and friends
+			// inspect it); when prepareExec wrapped a .cmd/.bat in cmd.exe the
+			// rewritten argv already carries it, so leave that alone.
+			if name == resolved {
+				cmd.Args = append([]string{args[0]}, args[1:]...)
+			}
 			cmd.Dir = hc.Dir
-			cmd.Env = env
+			// The child environment is the interpreter's LIVE env, so variables
+			// set in the command (inline `FOO=bar cmd`, `export FOO=bar`) reach
+			// the program — the old static env silently dropped them.
+			cmd.Env = childEnv(hc.Env)
 			cmd.Stdout = hc.Stdout
 			cmd.Stderr = hc.Stderr
 			cmd.Stdin = hc.Stdin

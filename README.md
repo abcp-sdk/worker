@@ -67,6 +67,9 @@ no passthrough to a host shell and no fallback, on any platform:
   dispatched via `cmd /c` inside the interp ExecHandler
 - explicit `bash -c "…"` still works: bash is just another external binary
   the interpreter spawns
+- each child process receives the interpreter's **live** environment and is
+  resolved through the **script's** `PATH`, so `export FOO=bar` / `FOO=bar cmd`
+  and `export PATH=…` take effect on the programs the command runs
 
 Job env **inherits the worker's own environment** — the sandbox image is the
 source of truth for toolchain variables, so a new toolchain works with no code

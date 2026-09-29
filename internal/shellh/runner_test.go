@@ -73,6 +73,82 @@ func TestEnvIsolation(t *testing.T) {
 	}
 }
 
+// Variables the command sets must reach the programs it spawns: an inline
+// `FOO=bar cmd` and a preceding `export FOO=bar` both have to be visible to
+// the child (the old static cmd.Env silently dropped them).
+func TestChildEnvPropagates(t *testing.T) {
+	r := newTestRunner(t)
+
+	cases := []struct {
+		name    string
+		command string
+		want    string
+	}{
+		{"export", "export FOO=bar; sh -c 'echo got=$FOO'", "got=bar"},
+		{"inline", "FOO=inline sh -c 'echo got=$FOO'", "got=inline"},
+		{"export-then-inline-wins", "export V=one; V=two sh -c 'echo got=$V'", "got=two"},
+		{"env-builtin", "env FOO=viaenv sh -c 'echo got=$FOO'", "got=viaenv"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			res, err := r.Run(context.Background(), tc.command, "", strings.NewReader(""), &stdout, nil)
+			if err != nil {
+				t.Fatalf("run error: %v", err)
+			}
+			if res.ExitCode != 0 {
+				t.Fatalf("exit %d (stderr?): %q", res.ExitCode, stdout.String())
+			}
+			if got := strings.TrimSpace(stdout.String()); got != tc.want {
+				t.Errorf("stdout = %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Command resolution must use the SCRIPT's PATH, so `export PATH=...` changes
+// which binary is found (the old path used the worker process's own PATH).
+func TestChildPathExportResolves(t *testing.T) {
+	r := newTestRunner(t)
+
+	dir := filepath.Join(r.Workspace, "bin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tool := filepath.Join(dir, "mytool")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\necho tool-ran\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	res, err := r.Run(context.Background(), "export PATH=\""+dir+":$PATH\"; mytool", "", strings.NewReader(""), &stdout, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 0 {
+		t.Fatalf("exit %d: %q", res.ExitCode, stdout.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "tool-ran" {
+		t.Errorf("stdout = %q want tool-ran", got)
+	}
+}
+
+// Per-job env (RunWithEnv) still layers on top of the base env and wins.
+func TestRunWithEnvOverrides(t *testing.T) {
+	ws := t.TempDir()
+	r := New(ws, []string{"PATH=/usr/bin:/bin", "BASE=frombase", "OVERRIDE=old"})
+
+	var stdout bytes.Buffer
+	_, err := r.RunWithEnv(context.Background(), "sh -c 'echo base=$BASE override=$OVERRIDE job=$PJ'", "",
+		map[string]string{"OVERRIDE": "new", "PJ": "perjob"}, strings.NewReader(""), &stdout, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "base=frombase override=new job=perjob" {
+		t.Errorf("stdout = %q", got)
+	}
+}
+
 func TestWorkdirRelative(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(ws, "sub"), 0o755); err != nil {
@@ -183,8 +259,11 @@ func TestLineBufferSplitCRLF(t *testing.T) {
 }
 
 func TestSanitizeExitCode(t *testing.T) {
-	cases := []struct{ in int; want uint8 }{
-		{0, 1},          // a failed process must never map to 0
+	cases := []struct {
+		in   int
+		want uint8
+	}{
+		{0, 1}, // a failed process must never map to 0
 		{1, 1},
 		{255, 255},
 		{256, 1},        // 256 & 0xff == 0 -> must become 1 (was the panic)
