@@ -4,6 +4,11 @@ Working notes for agents editing this repo. This repo is the **single source of
 truth** for the `agent-worker` binary and every sandbox image a sandbox runs.
 See `README.md` for the fork's RPC/behavior deltas; this file covers the build.
 
+Deployment manifests are NOT here: the standalone `agent-worker` Deployments
+(`worker-k8s/`) and the platform charts live in **`abc-protocol/deploy`**. This
+repo still owns the images (`Dockerfile`, `build-image.sh`, `agent-toolchain/`,
+`sandbox-images/`).
+
 ## Two image trees (do not confuse them)
 
 | tree | script | produces | used by |
@@ -207,8 +212,9 @@ predecessor tree passed the same build-args for its android/VM images
 
 - Worker: `go build ./... && go vet ./... && go test ./...`.
 - Toolchain image: `skopeo inspect` and, for a language, `docker run … <lang> --version`.
-- Sandbox image: deploy `k8s/agent-worker-*.yaml` and hit the worker's health
-  endpoint on `:48080`; run `dist/awtest-<os>-amd64` for the full Connect surface.
+- Sandbox image: deploy `abc-protocol/deploy`'s `worker-k8s/agent-worker-*.yaml`
+  and hit the worker's health endpoint on `:48080`; run `dist/awtest-<os>-amd64`
+  for the full Connect surface.
 - `scripts/multi-test.sh` runs awtest on linux/windows/macos in one report.
 
 ## Standing rules

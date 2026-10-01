@@ -58,10 +58,10 @@ a11y bus come up first (readiness still a few seconds); the visible desktop
 (openbox/x11vnc/noVNC) starts in the background.
 
 You can also run it as a plain Deployment — exactly like
-`k8s/agent-worker-android.yaml`:
+`abc-protocol/deploy`'s `worker-k8s/agent-worker-android.yaml`:
 
 ```sh
-kubectl apply -f k8s/agent-worker-desktop.yaml   # edit image tag for the flavor
+kubectl apply -f worker-k8s/agent-worker-desktop.yaml   # from abc-protocol/deploy
 ```
 
 Endpoints (in-pod): `:48080` worker API, `:6080` noVNC (open, ClusterIP only),
