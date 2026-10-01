@@ -15,7 +15,7 @@
 # whole stack plus agent-worker. The gateway's derive-on-launch path is NOT used
 # for this image (that path forces agent-worker as the sole ENTRYPOINT and would
 # never start the desktop); deploy it as a plain Deployment instead
-# (see k8s/agent-worker-desktop.yaml).
+# (see abc-protocol/deploy: worker-k8s/agent-worker-desktop.yaml).
 ARG BASE_IMAGE=git.agent.svc.cluster.local/agent-toolchain/toolchain-base:debian-trixie
 FROM ${BASE_IMAGE}
 

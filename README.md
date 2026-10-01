@@ -31,6 +31,12 @@ This repo also owns the **`agent-toolchain`** image catalog
 `agent-toolchain` namespace, used as sandbox bases / service images. See
 `agent-toolchain/README.md`.
 
+**Deployment lives elsewhere.** The k8s manifests (the standalone
+`agent-worker` Deployments, the KVM device plugin, the `workspace-local`
+StorageClass) moved to the deployment repo **`abc-protocol/deploy`** under
+`worker-k8s/`; this repo no longer carries `k8s/`. Image building stays here:
+`Dockerfile`, `build-image.sh` and `agent-toolchain/`.
+
 Fork deltas relative to upstream (the upstream EasyLab worker (`e6e069d`)):
 
 1. **filesvc: no workspace-root containment.** A relative path resolves under
@@ -130,14 +136,13 @@ internal/shellh/                 builtin shell (interp + exec/open handlers,
 internal/jobsvc/                 manager (ring + fanout) + sqlite store
 internal/filesvc/                binary-safe file ops, workspace containment
 internal/service.go              Connect handlers (unary + WatchJob streaming)
-k8s/agent-worker.yaml              standalone host-runner Deployment (linux)
-k8s/generic-device-plugin.yaml   admit /dev/kvm as squat.ai/kvm (unprivileged VMs)
-k8s/agent-worker-windows.yaml      non-privileged Windows VM worker (+ Services)
-k8s/agent-worker-macos.yaml        non-privileged macOS VM worker (+ Services)
-k8s/agent-worker-macos-xcode.yaml  the same, Xcode image, 2 vCPU / 8 GiB
-k8s/agent-worker-android.yaml      Android build toolchain + emulator + noVNC, one container
 sandbox-images/                  worker-bundled sandbox images (agent-toolchain base + binary)
 ```
+
+The standalone `agent-worker` Deployments (linux / macOS / Windows / Android /
+desktop), the KVM device plugin and the `workspace-local` StorageClass live in
+the deployment repo, **`abc-protocol/deploy`** (`worker-k8s/`); see “Build &
+deploy (cluster)” below.
 
 ## Regenerate
 
@@ -189,9 +194,15 @@ Other env: `WORKER_REQUIRE_AUTH=0` disables auth (dev only).
 ## Build & deploy (cluster)
 
 `./build-image.sh` builds via the shared buildkitd and pushes to forgejo;
-`kubectl apply -f k8s/agent-worker.yaml` deploys to the `temp` namespace
-(emptyDir `/data` for the history DB). Local bare-metal deployment is
-intentionally NOT supported — container + k8s only.
+the Deployment manifests live in the deployment repo **`abc-protocol/deploy`**:
+
+```sh
+kubectl apply -f worker-k8s/agent-worker.yaml   # from abc-protocol/deploy
+```
+
+It deploys to the `worker` namespace (emptyDir `/data` for the history DB).
+Local bare-metal deployment is intentionally NOT supported — container + k8s
+only.
 
 ## Windows / macOS VM sandboxes without `privileged: true`
 
@@ -202,7 +213,8 @@ has no per-device field, so a container normally cannot open `/dev/kvm` unless
 it is `privileged: true` (which also grants every other device). Mounting
 `/dev/kvm` as a hostPath is not enough — the open still returns `EPERM`.
 
-The fix is a **device plugin**. `k8s/generic-device-plugin.yaml` deploys the
+The fix is a **device plugin**. `worker-k8s/generic-device-plugin.yaml` (in
+`abc-protocol/deploy`) deploys the
 upstream [squat/generic-device-plugin](https://github.com/squat/generic-device-plugin)
 mirrored into the internal registry; it advertises `squat.ai/kvm` and, on
 `Allocate`, returns a `DeviceSpec` for `/dev/kvm` with permissions `rwm`.
@@ -234,13 +246,14 @@ container escape on a shared node, so it was dropped.
 Apply order:
 
 ```sh
-kubectl apply -f k8s/generic-device-plugin.yaml
-kubectl apply -f k8s/agent-worker-windows.yaml
-kubectl apply -f k8s/agent-worker-macos.yaml
+kubectl apply -f worker-k8s/generic-device-plugin.yaml   # from abc-protocol/deploy
+kubectl apply -f worker-k8s/agent-worker-windows.yaml
+kubectl apply -f worker-k8s/agent-worker-macos.yaml
 ```
 
-Full, ready-to-use examples live in `k8s/agent-worker-windows.yaml` and
-`k8s/agent-worker-macos.yaml` (worker API / SSH / noVNC Services included).
+Full, ready-to-use examples live in `abc-protocol/deploy`'s
+`worker-k8s/agent-worker-windows.yaml` and `worker-k8s/agent-worker-macos.yaml`
+(worker API / SSH / noVNC Services included).
 
 ### Token without a sidecar
 
@@ -367,7 +380,7 @@ plain `gradle assembleDebug` works even when the env is not set.
 ```sh
 scripts/build-all.sh                        # dist/ worker binaries
 ./agent-toolchain/android/build.sh          # -> <registry>/sandbox/sandbox-android:aosp
-kubectl apply -f k8s/agent-worker-android.yaml
+kubectl apply -f worker-k8s/agent-worker-android.yaml   # from abc-protocol/deploy
 ```
 
 The AVD is created on first start and its userdata lives on `/data` (an

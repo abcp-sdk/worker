@@ -8,7 +8,7 @@
 # agent-worker binary, and its entrypoint starts both. The gateway runs only
 # `sandbox-<lang>` images (agent-worker as the sole ENTRYPOINT), so this image
 # is NOT used as a sandbox base; deploy it as a plain Deployment
-# (k8s/agent-worker-desktop.yaml).
+# (abc-protocol/deploy: worker-k8s/agent-worker-desktop.yaml).
 #
 # Built FROM agent-toolchain/toolchain-base, so the base build tools come along.
 #
