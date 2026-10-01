@@ -111,5 +111,10 @@ nats) that every tenant sees via `list-oci-images`. Bump a version there, then:
   the upstream helper; the artifacts are already present here). It is
   gitignored and rebuilt on demand — a build without a needed artifact fails
   loudly with the missing filename.
+- **No runtime package mirrors are baked in** (no `PUB_HOSTED_URL`, SwiftPM
+  `mirrors.json`, Gradle `init.gradle`, `git insteadOf`, npm/pip index). The
+  images are generic/portable (also mirrored to ghcr); a mirror endpoint is a
+  per-deployment choice and belongs at the job/agent level, not the image. See
+  `../AGENTS.md` → "Runtime package mirrors are deliberately NOT baked in".
 - `clang` builds from the raw distro base (it deliberately ships WITHOUT gcc);
   kotlin/scala extend `toolchain-java25`.
