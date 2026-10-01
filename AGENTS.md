@@ -141,6 +141,31 @@ The VM goldens (`<variant>/data.qcow2` + `disk-support/`) are git-ignored and
 staged outside the repo; without them only a retag of the published image is
 possible, not a rebuild.
 
+## Runtime package mirrors are deliberately NOT baked in
+
+The toolchain/sandbox images ship **no runtime package-manager mirror config**:
+no `PUB_HOSTED_URL`, no `~/.swiftpm/configuration/mirrors.json`, no
+`~/.gradle/init.gradle`, no `git url.*.insteadOf`, no npm/pip/cargo index
+override. Two reasons:
+
+- **Portability.** These images are generic dev images and are also mirrored to
+  ghcr (`scripts/distribute-ghcr.sh`) and run outside this cluster; baking a
+  cluster-internal host (`*.svc.cluster.local`) into them would leak into every
+  consumer and break off-cluster use.
+- **Environment coupling.** A mirror endpoint is a per-deployment choice, not a
+  property of the language toolchain. `fetch-artifacts.sh` /
+  `build-toolchain.sh` use mihomo only at **build** time; runtime downloads are
+  the job's business.
+
+If a deployment wants runtime downloads to go through a shared artifact mirror
+(e.g. `artifact.worker.svc.cluster.local/artifacts/{git,maven,pub}`), inject it
+at the **job/agent level**, not into the image. The worker inherits its own
+process environment into every job, so env-based knobs (`PUB_HOSTED_URL`, a
+`GIT_CONFIG_GLOBAL`/`GRADLE_USER_HOME` pointing at a mounted config, …) set on
+the sandbox/service or the agent's skill layer reach the job. The mirror
+endpoints and the per-language config snippets live in the `easy-vcs/deploy`
+artifact service docs — do not copy them into this repo.
+
 ## Registry / naming
 
 - `REGISTRY=git.agent.svc.cluster.local`. Every sandbox-runnable image is under
