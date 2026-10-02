@@ -8,26 +8,54 @@
 // (/novnc/websocket) both resolve through this one mount with no path
 // rewriting — and noVNC works unmodified.
 //
-// The target is deployment/image specific (there is no universal default):
-//   - desktop images (openbox/labwc): the worker and noVNC/websockify share the
-//     container → http://127.0.0.1:6080
-//   - Windows/macOS VM images: the worker runs INSIDE the guest and reaches the
-//     container's nginx (WEB_PORT 8006) via the QEMU gateway →
-//     http://host.lan:8006
-//
-// so it is set with NOVNC_URL (empty = the mount is disabled / returns 404).
+// The upstream is the qemu VNC websocket (the VM container's nginx on
+// WEB_PORT 8006, which bridges to qemu's VNC). The worker runs INSIDE the guest
+// and reaches the container over the QEMU gateway (host.lan), so the target is
+// a FIXED address — NOT probed. NOVNC_URL overrides it (e.g. a same-container
+// desktop's websockify at http://127.0.0.1:6080).
 package novnc
 
 import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // Prefix is the mount point of the proxy on the worker's origin.
 const Prefix = "/novnc/"
+
+// DefaultTarget is the qemu VNC websocket endpoint. Fixed — never probed.
+const DefaultTarget = "http://host.lan:8006"
+
+// Target returns the noVNC upstream: an explicit NOVNC_URL, else DefaultTarget.
+func Target() string {
+	if v := strings.TrimSpace(os.Getenv("NOVNC_URL")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return DefaultTarget
+}
+
+// Configured reports the explicitly-configured noVNC target and its port.
+// ok=false unless NOVNC_URL is set — so a plain sandbox (which has no noVNC)
+// does NOT claim one, while a VM deployment declares it. The proxy's default
+// (DefaultTarget) is still used for the mount even when ok=false.
+func Configured() (string, int, bool) {
+	v := strings.TrimSpace(os.Getenv("NOVNC_URL"))
+	if v == "" {
+		return "", 0, false
+	}
+	v = strings.TrimRight(v, "/")
+	u, err := url.Parse(v)
+	if err != nil {
+		return v, 0, true
+	}
+	p, _ := strconv.Atoi(u.Port())
+	return v, p, true
+}
 
 // Handler proxies /novnc/* to target (e.g. http://127.0.0.1:6080). An empty or
 // unparseable target yields a handler that 404s, so the mount is a no-op when

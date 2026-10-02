@@ -1,13 +1,11 @@
 package internal
 
 import (
-	"net"
 	"os"
 	"os/exec"
-	"strconv"
-	"time"
 
 	workerv1 "github.com/abcp-sdk/agent-worker/gen/worker/v1"
+	"github.com/abcp-sdk/agent-worker/internal/novnc"
 )
 
 // probeCapabilities reports what the sandbox IMAGE can do. Everything is
@@ -26,12 +24,10 @@ func probeCapabilities() *workerv1.Capabilities {
 		c.Desktop, c.Display = true, "x11"
 	}
 
-	// noVNC: a web-VNC endpoint listening on 127.0.0.1 (same pod). Default
-	// 6080; WORKER_NOVNC_PORT overrides the probe.
-	if p := novncProbePort(); p > 0 {
-		if dialable("127.0.0.1", p) {
-			c.Novnc, c.NovncPort = true, int32(p)
-		}
+	// noVNC: reported only when the deployment EXPLICITLY configured NOVNC_URL
+	// (a VM manifest sets it; a plain sandbox does not). Not probed.
+	if _, port, ok := novnc.Configured(); ok {
+		c.Novnc, c.NovncPort = true, int32(port)
 	}
 
 	// xa11y: the accessibility CLI on PATH (X11 native-app automation).
@@ -39,25 +35,4 @@ func probeCapabilities() *workerv1.Capabilities {
 		c.Xa11Y = true
 	}
 	return c
-}
-
-// novncProbePort is the port to probe for noVNC (default 6080; 0 disables the
-// probe). WORKER_NOVNC_PORT overrides it.
-func novncProbePort() int {
-	if v := os.Getenv("WORKER_NOVNC_PORT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return 6080
-}
-
-// dialable reports whether 127.0.0.1:port accepts a TCP connection quickly.
-func dialable(host string, port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), 300*time.Millisecond)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
 }
