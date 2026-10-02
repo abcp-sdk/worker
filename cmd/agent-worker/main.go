@@ -29,6 +29,7 @@ import (
 	"github.com/abcp-sdk/agent-worker/internal/auth"
 	"github.com/abcp-sdk/agent-worker/internal/filesvc"
 	"github.com/abcp-sdk/agent-worker/internal/jobsvc"
+	"github.com/abcp-sdk/agent-worker/internal/novnc"
 	"github.com/abcp-sdk/agent-worker/internal/shellh"
 	"github.com/abcp-sdk/agent-worker/internal/webui"
 )
@@ -106,6 +107,11 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	})
+	// noVNC: proxy the sandbox's web-VNC endpoint at the worker's own origin, so
+	// the control panel can embed the desktop without a second exposed port.
+	// NOVNC_URL selects the target (desktop: http://127.0.0.1:6080; VM:
+	// http://host.lan:8006); unset = the mount 404s.
+	mux.Handle(novnc.Prefix, novnc.Handler(os.Getenv("NOVNC_URL")))
 	// Built-in static control panel at "/" (same-origin with the RPC above).
 	// Registered LAST: the RPC handlers own their longer, more specific paths
 	// ("/worker.v1.*"), which the ServeMux prefers over this catch-all.
