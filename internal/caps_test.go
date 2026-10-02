@@ -1,17 +1,13 @@
 package internal
 
-import (
-	"net"
-	"strconv"
-	"testing"
-)
+import "testing"
 
 func TestProbeCapabilitiesDesktop(t *testing.T) {
-	t.Setenv("WORKER_NOVNC_PORT", "0") // skip the dial
+	t.Setenv("NOVNC_URL", "") // no novnc declared
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "")
-	if c := probeCapabilities(); c.Desktop || c.Display != "" {
-		t.Fatalf("no display env must yield no desktop, got %+v", c)
+	if c := probeCapabilities(); c.Desktop || c.Display != "" || c.Novnc {
+		t.Fatalf("no display/novnc must yield none, got %+v", c)
 	}
 	t.Setenv("DISPLAY", ":99")
 	if c := probeCapabilities(); !c.Desktop || c.Display != "x11" {
@@ -24,34 +20,15 @@ func TestProbeCapabilitiesDesktop(t *testing.T) {
 	}
 }
 
+// TestProbeCapabilitiesNovnc: noVNC is reported ONLY when the deployment
+// explicitly set NOVNC_URL (never probed).
 func TestProbeCapabilitiesNovnc(t *testing.T) {
-	// A listener on an ephemeral port must be detected via the dial probe.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	t.Setenv("NOVNC_URL", "")
+	if c := probeCapabilities(); c.Novnc {
+		t.Fatalf("no NOVNC_URL must not report novnc, got %+v", c)
 	}
-	defer func() { _ = ln.Close() }()
-	port := ln.Addr().(*net.TCPAddr).Port
-	t.Setenv("WORKER_NOVNC_PORT", strconv.Itoa(port))
-	c := probeCapabilities()
-	if !c.Novnc || int(c.NovncPort) != port {
-		t.Fatalf("listening port must be detected, got %+v", c)
-	}
-	// A closed port must NOT be detected.
-	_ = ln.Close()
-	c = probeCapabilities()
-	if c.Novnc {
-		t.Fatalf("closed port must not be detected, got %+v", c)
-	}
-}
-
-func TestNovncProbePort(t *testing.T) {
-	t.Setenv("WORKER_NOVNC_PORT", "")
-	if p := novncProbePort(); p != 6080 {
-		t.Fatalf("default = %d, want 6080", p)
-	}
-	t.Setenv("WORKER_NOVNC_PORT", "0")
-	if p := novncProbePort(); p != 0 {
-		t.Fatalf("0 must disable the probe, got %d", p)
+	t.Setenv("NOVNC_URL", "http://host.lan:8006")
+	if c := probeCapabilities(); !c.Novnc || c.NovncPort != 8006 {
+		t.Fatalf("NOVNC_URL must report novnc:8006, got %+v", c)
 	}
 }

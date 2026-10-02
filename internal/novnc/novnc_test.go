@@ -88,3 +88,31 @@ func TestNotConfigured(t *testing.T) {
 		}
 	}
 }
+
+// TestTargetLocksQemuVNC: the default is the qemu VNC websocket, never probed;
+// NOVNC_URL overrides it.
+func TestTargetLocksQemuVNC(t *testing.T) {
+	t.Setenv("NOVNC_URL", "")
+	if got := Target(); got != DefaultTarget {
+		t.Fatalf("default target = %q, want %q", got, DefaultTarget)
+	}
+	if DefaultTarget != "http://host.lan:8006" {
+		t.Fatalf("DefaultTarget = %q, want the qemu VNC endpoint", DefaultTarget)
+	}
+	t.Setenv("NOVNC_URL", "http://127.0.0.1:6080/")
+	if got := Target(); got != "http://127.0.0.1:6080" {
+		t.Fatalf("override target = %q", got)
+	}
+}
+
+// TestConfigured: only an explicit NOVNC_URL is "configured" (capabilities).
+func TestConfigured(t *testing.T) {
+	t.Setenv("NOVNC_URL", "")
+	if _, _, ok := Configured(); ok {
+		t.Fatal("unset NOVNC_URL must not be configured")
+	}
+	t.Setenv("NOVNC_URL", "http://host.lan:8006")
+	if _, port, ok := Configured(); !ok || port != 8006 {
+		t.Fatalf("configured = %v port=%d", ok, port)
+	}
+}
