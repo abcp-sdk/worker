@@ -9,10 +9,15 @@
   import ShellPage from '$lib/pages/ShellPage.svelte'
   import FilesDrawer from '$lib/pages/FilesDrawer.svelte'
   import JobsDrawer from '$lib/pages/JobsDrawer.svelte'
+  import DesktopPage from '$lib/pages/DesktopPage.svelte'
   import { session, setToken } from '$lib/session.svelte'
 
   let entered = $state(session.connected)
   let drawer = $state<'files' | 'jobs' | null>(null)
+  // Main surface: the shell console, or the graphical desktop when the sandbox
+  // advertises one (Info.capabilities.novnc).
+  let surface = $state<'shell' | 'desktop'>('shell')
+  const hasDesktop = $derived(!!session.capabilities?.novnc)
 
   onMount(() => {
     document.documentElement.dataset.theme = 'dark'
@@ -29,6 +34,11 @@
   function toggle(which: 'files' | 'jobs') {
     drawer = drawer === which ? null : which
   }
+
+  function showDesktop() {
+    drawer = null
+    surface = surface === 'desktop' ? 'shell' : 'desktop'
+  }
 </script>
 
 {#if !entered}
@@ -42,6 +52,16 @@
       </span>
       <span class="hidden font-mono text-micro text-muted-foreground sm:inline">{session.os}/{session.arch}</span>
       <span class="ml-auto"></span>
+      {#if hasDesktop}
+        <Button
+          variant="ghost"
+          size="sm"
+          class="gap-1.5 {surface === 'desktop' ? 'bg-muted text-foreground' : ''}"
+          onclick={showDesktop}
+        >
+          <AppIcons.desktop class="size-4" />Desktop
+        </Button>
+      {/if}
       <Button
         variant="ghost"
         size="sm"
@@ -64,12 +84,16 @@
     </header>
 
     <div class="relative flex min-h-0 flex-1">
-      <ShellPage />
-      {#if drawer === 'files'}
+      {#if surface === 'desktop'}
+        <DesktopPage onClose={() => (surface = 'shell')} />
+      {:else}
+        <ShellPage />
+      {/if}
+      {#if surface === 'shell' && drawer === 'files'}
         <aside class="flex min-h-0 w-full flex-col border-border bg-card max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:border-l-0 sm:w-1/2 sm:border-l">
           <FilesDrawer onClose={() => (drawer = null)} />
         </aside>
-      {:else if drawer === 'jobs'}
+      {:else if surface === 'shell' && drawer === 'jobs'}
         <aside class="flex min-h-0 w-full flex-col border-border bg-card max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:border-l-0 sm:w-1/2 sm:border-l">
           <JobsDrawer onClose={() => (drawer = null)} />
         </aside>

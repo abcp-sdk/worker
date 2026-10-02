@@ -16,6 +16,7 @@ import {
   ListChecks,
   LocateFixed,
   LogOut,
+  Monitor,
   Play,
   RefreshCw,
   Save,
@@ -51,6 +52,8 @@ export const AppIcons = {
   kill: Ban,
   // shell
   detach: Unplug,
+  // desktop (noVNC)
+  desktop: Monitor,
 } as const
 
 export type AppIcon = (typeof AppIcons)[keyof typeof AppIcons]

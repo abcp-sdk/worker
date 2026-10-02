@@ -18,6 +18,15 @@ export const session = $state({
   os: '',
   arch: '',
   bootId: '',
+  /** What the sandbox IMAGE can do (Info.capabilities). */
+  capabilities: null as null | {
+    desktop?: boolean
+    display?: string
+    novnc?: boolean
+    novncPort?: number
+    xa11y?: boolean
+    distro?: string
+  },
   connected: false,
 })
 
@@ -39,12 +48,21 @@ export function applyInfo(i: {
   os?: string
   arch?: string
   bootId?: string
+  capabilities?: {
+    desktop?: boolean
+    display?: string
+    novnc?: boolean
+    novncPort?: number
+    xa11y?: boolean
+    distro?: string
+  }
 }) {
   session.workspace = i.workspace || '/'
   session.home = i.home || ''
   session.os = i.os || ''
   session.arch = i.arch || ''
   session.bootId = i.bootId || ''
+  session.capabilities = i.capabilities ?? null
   setAnchors({ workspace: session.workspace })
 }
 
