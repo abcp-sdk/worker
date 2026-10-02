@@ -23,7 +23,7 @@ const (
 	// DefaultIndexURL points at the in-cluster artifact service. It is only a
 	// DEFAULT: WORKER_TOOLCHAIN_INDEX always wins (the installer hard-codes no
 	// mirror, and the image hard-codes no index address).
-	DefaultIndexURL = "http://artifact.worker.svc.cluster.local/artifacts/generic/toolchains/index.json"
+	DefaultIndexURL = "http://artifact.worker.svc.cluster.local/artifacts/generic/toolchains/index/index.json"
 	// DefaultRoot is where versions are installed.
 	DefaultRoot = "/opt/toolchains"
 

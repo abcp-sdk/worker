@@ -48,7 +48,15 @@ set +a
 json_str() { printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 
 # artifact_url <lang> <version> <file>
-artifact_url() { printf '%s/artifacts/generic/toolchains/%s/%s/%s' "${ARTIFACT%/}" "$1" "$2" "$3"; }
+#
+# NOTE the FLAT shape: artifact's generic store addresses content as
+# `/artifacts/generic/<name>/<version>/<filename>` — EXACTLY three segments (see
+# easy-vcs/artifact generic/lib.go). A nested `toolchains/<lang>/<version>/<file>`
+# is four segments and 404s. So the toolchain name IS `toolchains-<lang>`.
+artifact_url() { printf '%s/artifacts/generic/toolchains-%s/%s/%s' "${ARTIFACT%/}" "$1" "$2" "$3"; }
+
+# index_url -> the published index (name `toolchains`, version `index`).
+index_url() { printf '%s/artifacts/generic/toolchains/index/index.json' "${ARTIFACT%/}"; }
 
 # built_tarball_name <lang> -> the single file publish-artifacts.sh uploads.
 built_tarball_name() { echo "toolchain.tar.gz"; }
@@ -137,9 +145,9 @@ if [ "$PUBLISH" -eq 1 ]; then
   generate > "$tmp"
   jq -e . "$tmp" >/dev/null || { echo "generated index is not valid JSON" >&2; exit 1; }
   curl -fsS -X PUT -H "Authorization: Bearer ${ARTIFACT_TOKEN}" \
-    --data-binary "@${tmp}" "${ARTIFACT%/}/artifacts/generic/toolchains/index.json"
+    --data-binary "@${tmp}" "$(index_url)"
   rm -f "$tmp"
-  echo "published ${ARTIFACT%/}/artifacts/generic/toolchains/index.json"
+  echo "published $(index_url)"
 elif [ -n "$OUT" ]; then
   generate > "$OUT"
 else

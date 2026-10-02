@@ -125,12 +125,17 @@ ARTIFACT_TOKEN=<token> ./build-index.sh --publish
 ```
 
 `publish-artifacts.sh` uploads each `(lang, version)` to the shared artifact
-generic store (`$ARTIFACT/artifacts/generic/toolchains/<lang>/<version>/<file>`,
-idempotent). As-is toolchains are uploaded verbatim; `--build` handles the
-install.sh/compile kinds (phase 2). `build-index.sh` then emits the index whose
-`url`s point at those paths, with sha256 from the local cache. Schema + consumer
-contract: `abc-protocol/deploy/DEVELOP.md` → "Toolchain index"; implementation:
-`internal/toolchains`.
+generic store (idempotent). As-is toolchains are uploaded verbatim; `--build`
+handles the install.sh/compile kinds (phase 2). `build-index.sh` then emits the
+index whose `url`s point at those paths, with sha256 from the local cache.
+Schema + consumer contract: `abc-protocol/deploy/DEVELOP.md` → "Toolchain
+index"; implementation: `internal/toolchains`.
+
+**Layout**: artifact's generic store is EXACTLY three path segments
+(`/artifacts/generic/<name>/<version>/<filename>`), so the layout is FLAT —
+`toolchains-<lang>/<ver>/<file>` for a toolchain, `toolchains/index/index.json`
+for the index. (A nested `toolchains/<lang>/<version>/<file>` is four segments
+and 404s.)
 
 strip/bin/rename mirror each `Dockerfile.<lang>`'s unpack — keep them in sync
 when a Dockerfile's unpack changes.
