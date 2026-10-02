@@ -63,6 +63,10 @@ type Version struct {
 	// (and runs install[] there). Needed when the installer refuses its own
 	// directory (rust/clojure install.sh).
 	UnpackDir string `json:"unpack_dir"`
+	// InstallPrefix, when set, is the subdir of the version root that install[]
+	// and `bin` are resolved against (the installer's OUTPUT dir). E.g. conda:
+	// the installer writes to <root>/miniconda, so bin resolves under it.
+	InstallPrefix string `json:"install_prefix"`
 }
 
 // Artifact is one downloadable file of a version.
