@@ -41,9 +41,8 @@
 # from source), elixir + gleam (multi-part OTP build + hex), clang
 # (apt.llvm.org + conan wheels), java + swift (very large images), conda (its
 # installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
-# based), godot (needs the OS fontconfig package), perl (cpanm's `#!perl`
-# shebang needs the Dockerfile's make-install) — not pure unpack.
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter}"
+# based), perl (cpanm's `#!perl` shebang needs the Dockerfile's make-install).
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
@@ -67,7 +66,6 @@ toolchain_version() {
 toolchain_requires() {
   case "$1" in
     kotlin|groovy|clojure|scala) echo "java25" ;;
-    gleam) echo "elixir" ;;
     *) echo "" ;;
   esac
 }
@@ -103,7 +101,8 @@ toolchain_specs() {
     java)    echo "JDK_URL|tar.gz|1|bin;GRADLE_URL|zip|1|bin" ;;
     scala)   echo "SCALA_CLI_URL|gz|0|bin/scala-cli;SBT_URL|tar.gz|1|bin" ;;
     groovy)  echo "GROOVY_URL|zip|1|bin" ;;
-    gleam)   echo "GLEAM_URL|tar.gz|1|." ;;
+    # gleam ships a single musl binary at the archive ROOT (strip 0).
+    gleam)   echo "GLEAM_URL|tar.gz|0|." ;;
     ruby)    echo "RUBY_URL|tar.gz|0|x64/bin" ;;             # ruby-builder layout: x64/{bin,lib}; + env
     flutter) echo "FLUTTER_LINUX_URL|tar.xz|1|bin||linux|amd64;FLUTTER_WINDOWS_URL|zip|1|bin||windows|amd64;FLUTTER_MACOS_URL|zip|1|bin||darwin|amd64;FLUTTER_MACOS_ARM64_URL|zip|1|bin||darwin|arm64" ;;
     swift)   echo "SWIFT_URL|tar.gz|1|usr/bin" ;;
@@ -113,12 +112,14 @@ toolchain_specs() {
     ocaml)   echo "OPAM_URL|raw|0|bin/opam" ;;
     haskell) echo "GHCUP_URL|raw|0|bin/ghcup" ;;
     perl)    echo "CPANM_URL|tar.gz|1|bin" ;;
-    godot)   echo "GODOT_URL|zip|0|bin|Godot_v4.7.2-stable_linux.x86_64->bin/godot" ;;
+    # godot ships one executable in the zip ROOT (strip 0); the zip has no exec
+    # bit, so install[] chmods it. `bin "."` puts the version root on PATH.
+    godot)   echo "GODOT_URL|zip|0|." ;;
     # rust/elixir/clojure/conda are as-is too, but need an install[] step (below).
     rust)    echo "RUST_URL|tar.gz|1|bin" ;;                 # install.sh --prefix={root} populates bin/
     elixir)  echo "OTP_URL|tar.gz|1|bin;ELIXIR_URL|zip|1|bin;HEX_URL|zip|1|lib/elixir/lib/hex/hex.ez;HEXKEY_URL|raw|0|lib/elixir/lib/hex/hex-registry-public-key.pem" ;;
     clojure) echo "CLOJURE_URL|tar.gz|1|bin" ;;
-    conda)   echo "CONDA_URL|raw|0|bin/miniconda.sh" ;;
+    conda)   echo "CONDA_URL|raw|0|miniconda/bin/miniconda.sh" ;;  # installer; installs into {root}/miniconda
     # phase 2b (source compile): publisher ships ONE relocatable tarball.
     lua|r)   echo "" ;;
     *) return 1 ;;
@@ -132,7 +133,10 @@ toolchain_install() {
     rust)    echo "./install.sh --prefix={root} --without=rust-docs --disable-ldconfig" ;;
     elixir)  echo "./Install -minimal {root}" ;;
     clojure) echo "./install.sh {root}" ;;  # phase 2b: upstream install.sh is sed/ruby-based
-    conda)   echo "bash {root}/bin/miniconda.sh -b -p {root}" ;;
+    # The Miniconda installer REFUSES an existing prefix, so it installs into a
+    # fresh subdir ({root}/miniconda); `bin` then points at that subdir's bin.
+    conda)   echo "bash {root}/miniconda/bin/miniconda.sh -b -p {root}/miniconda" ;;
+    godot)   echo "chmod 755 {root}/Godot_v4.7.2-stable_linux.x86_64" ;;
     *) echo "" ;;
   esac
 }
@@ -154,6 +158,17 @@ toolchain_env() {
 toolchain_unpack_dir() {
   case "$1" in
     rust|clojure) echo "dist" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---- build-time system deps (apt) -------------------------------------------
+# Space-separated apt packages a language needs at BUILD (publish) time; the
+# publisher apt-installs them in its build container. Toolchains whose upstream
+# is relocatable ignore this. swift's tarball needs these shared libs.
+toolchain_deps() {
+  case "$1" in
+    swift) echo "libc6-dev binutils libcurl4t64 libedit2 libncurses6 libsqlite3-0 libxml2 libz3-4 tzdata zlib1g-dev libpython3-dev libstdc++-14-dev" ;;
     *) echo "" ;;
   esac
 }
