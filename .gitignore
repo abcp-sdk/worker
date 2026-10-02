@@ -8,6 +8,9 @@
 # agent-toolchain/build-toolchain.sh -> fetch-artifacts.sh); never committed.
 /agent-toolchain/cache/
 
+# agent-toolchain: publish-artifacts.sh staging (built relocatable tarballs).
+/agent-toolchain/.publish/
+
 # go
 go.work.sum
 *.db

@@ -225,21 +225,44 @@ and the worker installs them into `$WORKER_TOOLCHAIN_ROOT` (default
 The index is fetched from `$WORKER_TOOLCHAIN_INDEX` (default: the artifact
 generic mount). **The installer hard-codes no mirror and the image hard-codes no
 index address** — the index's `url` fields are data. The schema (artifacts[],
-sha256-required, format, strip/bin, install[], requires[]) is the contract in
-`abc-protocol/deploy/DEVELOP.md` → "Toolchain index".
+sha256-required, format, strip/bin/rename, install[], requires[]) is the contract
+in `abc-protocol/deploy/DEVELOP.md` → "Toolchain index".
 
-`agent-toolchain/build-index.sh` GENERATES the index from the same
-`toolchain/<distro>/urls.env` (+ `urls.local.env`) the image builds use, taking
-sha256 from `cache/<distro>/` (run `fetch-artifacts.sh` first). `--publish`
-PUTs it to the artifact mount with `ARTIFACT_TOKEN`. It is deliberately NOT a
-runtime-mirror: it is build-time data generation, consistent with the
-"runtime mirrors are not baked in" rule above.
+The tool list + per-language unpack metadata live in **one place**,
+`agent-toolchain/toolchain-meta.sh` (shared by the index generator and the
+publisher). `PUBLISHED_LANGS` is the installable set; a language not in it is
+absent from the index (declaring it fails loudly). strip/bin/rename mirror each
+`Dockerfile.<lang>`'s unpack.
+
+`agent-toolchain/build-index.sh` GENERATES the index (url → the artifact generic
+path, sha256 from `cache/<distro>/`), `--publish` PUTs it with `ARTIFACT_TOKEN`.
+`agent-toolchain/publish-artifacts.sh` uploads the artifacts first (as-is
+verbatim; `--build` for install.sh/compile kinds, phase 2). Both are build-time
+data generation, NOT a runtime mirror — consistent with the "runtime mirrors are
+not baked in" rule above.
 
 Install semantics: idempotent + atomic (`.tmp` → sha256 verify → `rename`, with
 an `.installed` marker), `flock` on the root for concurrent ensures, and a
 two-layer PATH (`$ROOT/<lang>/<ver>/bin` merged into the runner's job env AND
 the worker's own process env). `requires[]` (e.g. kotlin → java25) is pulled in
 automatically.
+
+### Publishing the toolchains (phase 1)
+
+The artifacts are published to the shared `artifact` generic store (owner
+decision: publish the FULL set, incl. restrictive-license tools — internal
+container-release-style distribution, not commercial redistribution):
+
+```sh
+cd agent-toolchain
+./fetch-artifacts.sh                    # populate cache/<distro>/ (sha256 source)
+ARTIFACT_TOKEN=<token> ./publish-artifacts.sh        # upload + publish index
+```
+
+Phase 1 = pure-unpack only: `go node python java25 dotnet php dart kotlin zig
+bun pixi`. Phase 2 adds the build kinds (`rust elixir lua r clojure`) and the
+remaining pure-unpack langs. GPU/pip chains and VM/desktop images stay images
+(never runtime-installed).
 
 ## Known gotcha: `fetch-artifacts.sh` provenance
 

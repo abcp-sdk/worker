@@ -43,6 +43,10 @@ type Artifact struct {
 	Format string `json:"format"`
 	Strip  int    `json:"strip"`
 	Bin    string `json:"bin"`
+	// Rename renames an unpacked top-level entry after `strip`, "src->dst"
+	// (both relative to the version root). Used e.g. by dart
+	// ("dart-sdk->dart") so `bin` can name the final layout.
+	Rename string `json:"rename"`
 }
 
 // ParseIndex decodes and validates an index. Validation is strict: a missing
