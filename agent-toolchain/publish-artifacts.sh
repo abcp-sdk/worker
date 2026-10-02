@@ -65,8 +65,11 @@ put() { # local-file remote-relative-path
   # easy-vcs/artifact generic/lib.go). So name = toolchains-<lang>.
   local url="${ARTIFACT%/}/artifacts/generic/${name}/${ver}/${fname}"
   if [ "$DRY" -eq 1 ]; then echo "  [dry-run] PUT ${url} <- ${file}"; return 0; fi
+  # Stream the body (`-T`), never `--data-binary @file`: the latter buffers the
+  # WHOLE file in memory, which OOM-killed the publisher on the ~2 GB flutter
+  # SDKs. `-T` streams from disk with a fixed memory footprint.
   curl -fsS -X PUT -H "Authorization: Bearer ${ARTIFACT_TOKEN}" \
-    --data-binary @"${file}" "${url}" >/dev/null
+    -T "${file}" "${url}" >/dev/null
   echo "  PUT ${name}/${ver}/${fname}"
 }
 
