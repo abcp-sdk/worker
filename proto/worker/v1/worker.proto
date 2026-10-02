@@ -46,6 +46,29 @@ message InfoResponse {
                            // rising counter means consumers are too slow
   string home = 7;      // the worker user's home dir (where `~` resolves); may
                         // be empty when the platform has no home concept
+  // What this worker's IMAGE can do, probed at request time (never baked into
+  // the binary). Lets a client (the control panel, the gateway) decide what to
+  // offer WITHOUT knowing the image ahead of time.
+  Capabilities capabilities = 8;
+}
+
+// Capabilities describes optional runtime features present in the sandbox.
+// Each is a best-effort probe; a false/empty value means "not detected", not
+// "impossible". Nothing here is required for Execute to work.
+message Capabilities {
+  // A graphical desktop is present: DISPLAY (X11) or WAYLAND_DISPLAY (Wayland)
+  // is set in the worker's environment (jobs inherit it).
+  bool desktop = 1;
+  // "x11" | "wayland" | "" — which display protocol `desktop` refers to.
+  string display = 2;
+  // A noVNC/web-VNC endpoint is listening on 127.0.0.1 (same pod).
+  bool novnc = 3;
+  // The port `novnc` was detected on (0 when absent; default probe 6080).
+  int32 novnc_port = 4;
+  // The `xa11y` accessibility CLI is on PATH (native-app automation, X11).
+  bool xa11y = 5;
+  // /etc/os-release ID (e.g. "debian", "alpine", "ubuntu"); "" if unknown.
+  string distro = 6;
 }
 
 // ---- jobs ----

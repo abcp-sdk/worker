@@ -53,6 +53,7 @@ func (s *WorkerService) Info(ctx context.Context, req *connect.Request[workerv1.
 		BootId:       s.bootID,
 		DroppedLines: s.jobs.Dropped(),
 		Home:         filepath.ToSlash(homeDir()),
+		Capabilities: probeCapabilities(),
 	}), nil
 }
 
