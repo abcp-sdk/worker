@@ -166,6 +166,34 @@ the sandbox/service or the agent's skill layer reach the job. The mirror
 endpoints and the per-language config snippets live in the `easy-vcs/deploy`
 artifact service docs — do not copy them into this repo.
 
+## Packages via artifact (not GitHub / public registries)
+
+The platform's private package registry is **`artifact`** (Service
+`artifact.worker.svc.cluster.local`, `worker` namespace; plain HTTP, anonymous
+**pull**, write needs a token). Internal modules are not on any public
+registry. The authoritative guide — publish + consume for every ecosystem,
+endpoint, auth — is **`easy-vcs/deploy:PUBLISHING.md`**. This repo is Go, so
+the commands that matter here:
+
+```sh
+A=http://artifact.worker.svc.cluster.local
+
+# consume (Go module deps) — a sandbox with no proxy env otherwise times out
+# against proxy.golang.org (dial tcp ...: i/o timeout) when running `go build`.
+export GOPROXY=$A/artifacts/go GOSUMDB=off
+
+# publish a Go module
+curl -X PUT --data-binary @<zip> "$A/artifacts/go/upload?name=<module>&version=vX.Y.Z"
+```
+
+**Build-time** fetches (this repo's `agent-toolchain/` images) reach upstream
+through buildkitd + mihomo today (`fetch-artifacts.sh`, `config.sh`); to route
+them through artifact instead, point the tools at the artifact mounts (npm
+`registry=$A/artifacts/npm/`, pip `--index-url $A/artifacts/pypi/simple/`, apt
+`$A/artifacts/debian/...`). Not required for the current builds. This is a
+**build-time** source choice — distinct from the runtime-mirror decision above
+(which is still: not baked into the images).
+
 ## Registry / naming
 
 - `REGISTRY=git.agent.svc.cluster.local`. Every sandbox-runnable image is under

@@ -116,5 +116,8 @@ nats) that every tenant sees via `list-oci-images`. Bump a version there, then:
   images are generic/portable (also mirrored to ghcr); a mirror endpoint is a
   per-deployment choice and belongs at the job/agent level, not the image. See
   `../AGENTS.md` → "Runtime package mirrors are deliberately NOT baked in".
+- **Packages come from the in-cluster `artifact` registry** (private modules
+  are not on any public registry): see `../AGENTS.md` → "Packages via artifact"
+  and `easy-vcs/deploy:PUBLISHING.md` for the per-ecosystem commands.
 - `clang` builds from the raw distro base (it deliberately ships WITHOUT gcc);
   kotlin/scala extend `toolchain-java25`.
