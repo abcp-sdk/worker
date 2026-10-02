@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -109,6 +110,10 @@ func (in *Installer) Ensure(ctx context.Context, specs []Spec) ([]string, error)
 		if !ok {
 			return fmt.Errorf("toolchain %q not in index", sp.Name)
 		}
+		if !tc.allowsOS(runtime.GOOS) {
+			return fmt.Errorf("toolchain %q is not installable on %s (allowed: %v); build it on a %s sandbox instead",
+				sp.Name, runtime.GOOS, tc.OS, tc.OS[0])
+		}
 		v, ok := tc.Versions[sp.Version]
 		if !ok {
 			return fmt.Errorf("toolchain %q has no version %q in index", sp.Name, sp.Version)
@@ -180,7 +185,12 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 			return nil, err
 		}
 	}
-	for _, art := range v.Artifacts {
+	arts := platformArtifacts(v.Artifacts, runtime.GOOS, runtime.GOARCH)
+	if len(arts) == 0 {
+		cleanup()
+		return nil, fmt.Errorf("%s@%s: no artifact for %s/%s", name, ver, runtime.GOOS, runtime.GOARCH)
+	}
+	for _, art := range arts {
 		if err := in.fetchArtifact(ctx, art, unpackDest); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("%s@%s: %w", name, ver, err)
@@ -373,6 +383,18 @@ func singleTarget(dest string, art Artifact) (string, error) {
 	return target, nil
 }
 
+// platformArtifacts filters a version's artifacts to the current platform
+// (empty OS/Arch = wildcard), so ONE index serves linux AND windows/macos.
+func platformArtifacts(all []Artifact, goos, goarch string) []Artifact {
+	out := make([]Artifact, 0, len(all))
+	for _, a := range all {
+		if a.matches(goos, goarch) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // binDirs computes the PATH dirs for an installed version.
 func binDirs(root string, v Version) []string {
 	// `bin` is always relative to the VERSION ROOT (install[] writes there;
@@ -384,10 +406,11 @@ func binDirs(root string, v Version) []string {
 			out = append(out, p)
 		}
 	}
-	if len(v.Artifacts) == 0 {
+	arts := platformArtifacts(v.Artifacts, runtime.GOOS, runtime.GOARCH)
+	if len(arts) == 0 {
 		return []string{base}
 	}
-	for _, a := range v.Artifacts {
+	for _, a := range arts {
 		rel := expandRoot(a.Bin, base)
 		switch normalizeFormat(a.Format) {
 		case "gz", "phar", "raw":
