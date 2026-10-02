@@ -174,6 +174,12 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 			cleanup()
 			return nil, fmt.Errorf("%s@%s: %w", name, ver, err)
 		}
+		if art.Rename != "" {
+			if err := applyRename(tmp, art.Rename); err != nil {
+				cleanup()
+				return nil, fmt.Errorf("%s@%s: %w", name, ver, err)
+			}
+		}
 	}
 	if len(v.Install) > 0 {
 		if err := runInstall(v.Install, tmp, in.logf); err != nil {

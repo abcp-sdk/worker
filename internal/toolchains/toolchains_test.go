@@ -217,6 +217,37 @@ func TestEnsureInstallStep(t *testing.T) {
 	}
 }
 
+// TestEnsureRename: a top-level dir is renamed after unpack (dart's
+// "dart-sdk->dart") so the declared `bin` resolves.
+func TestEnsureRename(t *testing.T) {
+	blob := zipSingle(t, "dart-sdk/bin/dart", "#!/bin/sh\n")
+	idxURL, _ := serveIndex(t, map[string][]byte{"dart.zip": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"dart": map[string]any{"versions": map[string]any{
+				"3.13.4": map[string]any{"artifacts": []any{map[string]any{
+					"url": base + "/blobs/dart.zip", "sha256": sha(blob), "format": "zip", "strip": 0,
+					"bin": "dart/bin", "rename": "dart-sdk->dart",
+				}}},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	bins, err := in.Ensure(context.Background(), []Spec{{Name: "dart", Version: "3.13.4"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "dart", "3.13.4", "dart", "bin")
+	if len(bins) != 1 || bins[0] != want {
+		t.Fatalf("bins=%v want [%s]", bins, want)
+	}
+	if _, err := os.Stat(filepath.Join(want, "dart")); err != nil {
+		t.Fatalf("renamed bin not found: %v", err)
+	}
+}
+
 func TestParseSpecs(t *testing.T) {
 	specs, err := ParseSpecs("go=1.27.1, node=26.9.0\n# comment\n\npython=3.14.7")
 	if err != nil {

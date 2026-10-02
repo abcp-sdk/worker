@@ -178,3 +178,33 @@ func fileStem(rawurl string) string {
 }
 
 func expandRoot(s, root string) string { return strings.ReplaceAll(s, "{root}", root) }
+
+// applyRename renames one unpacked entry under the version root. spec is
+// "src->dst" (both relative to root, after strip). Both ends must stay inside
+// root; the source must exist.
+func applyRename(root, spec string) error {
+	src, dst, ok := strings.Cut(spec, "->")
+	if !ok {
+		return fmt.Errorf("rename %q must be src->dst", spec)
+	}
+	src, dst = strings.TrimSpace(src), strings.TrimSpace(dst)
+	if src == "" || dst == "" {
+		return fmt.Errorf("rename %q has an empty side", spec)
+	}
+	from, err := safeJoin(root, src)
+	if err != nil {
+		return fmt.Errorf("rename %q: %w", spec, err)
+	}
+	to, err := safeJoin(root, dst)
+	if err != nil {
+		return fmt.Errorf("rename %q: %w", spec, err)
+	}
+	if _, err := os.Lstat(from); err != nil {
+		return fmt.Errorf("rename %q: source missing: %w", spec, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return err
+	}
+	_ = os.RemoveAll(to)
+	return os.Rename(from, to)
+}

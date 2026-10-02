@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 # Generate the on-demand toolchain index (schema 1) consumed by the worker's
-# toolchain installer (internal/toolchains; see abc-protocol/deploy/DEVELOP.md
-# "Toolchain index").
+# toolchain installer (internal/toolchains; contract:
+# abc-protocol/deploy/DEVELOP.md -> "Toolchain index").
 #
 #   ./build-index.sh                 # print index.json to stdout
 #   ./build-index.sh -o index.json   # write to a file
 #   ./build-index.sh --publish       # PUT to the artifact generic mount
 #
-# URLs come from toolchain/<DISTRO>/urls.env (+ urls.local.env overrides) — the
-# SAME source the image builds use — and sha256 is computed from the local
-# cache (fetch-artifacts.sh populates it). So there is one place to drift-proof.
-# A missing cache artifact is a hard error (run ./fetch-artifacts.sh first).
+# The `url` of every artifact points at the artifact generic store
+# (`$ARTIFACT/artifacts/generic/toolchains/<lang>/<version>/<file>`) — i.e. the
+# files publish-artifacts.sh uploads. sha256 is computed from the LOCAL cache
+# (`fetch-artifacts.sh` populates it) for as-is toolchains, and from the built
+# relocatable tarball for build toolchains (run publish-artifacts.sh first).
 #
-# The per-language unpack metadata (format/strip/bin/requires/install) is a
-# STARTING POINT derived from each language's Dockerfile install logic. Before
-# publishing, validate each entry against its Dockerfile — several languages are
-# NOT "unpack and go" (rust needs ./install.sh; lua/r compile from source;
-# ghcup/opam/conda are single-file installers) and some archive roots differ.
-# Treat `build-index.sh` as the drift-proof URL+sha256 source, not as a
-# verified-per-language authority.
+# The tool list + per-language metadata live in toolchain-meta.sh (one place,
+# shared with publish-artifacts.sh). Override ARTIFACT for a different base.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # config.sh reads NO_PROXY under `set -u`; default it so a bare environment works.
 : "${NO_PROXY:=}"
 # shellcheck source=config.sh
 . "${HERE}/config.sh"
+# shellcheck source=toolchain-meta.sh
+. "${HERE}/toolchain-meta.sh"
 
 DIR="${HERE}/toolchain/${DISTRO}"
 CACHE="${CACHE_ROOT}/${DISTRO}"
+ARTIFACT="${ARTIFACT:-http://artifact.worker.svc.cluster.local}"
+BUILT_DIR="${HERE}/.publish"          # publish-artifacts.sh stages built tarballs here
 OUT=""
 PUBLISH=0
 while [ $# -gt 0 ]; do
@@ -44,136 +44,87 @@ set -a
 [ -f "${HERE}/toolchain/urls.local.env" ] && . "${HERE}/toolchain/urls.local.env"
 set +a
 
-# Artifact metadata per language. Each spec is VAR|format|strip|bin; a language
-# may have several (php = php + composer). `requires` / `install` are optional.
-#
-# bin: the PATH dir RELATIVE to the version root (or "{root}"-absolute).
-meta() {
-  case "$1" in
-    go)        echo "GO_URL|tar.gz|1|bin" ;;
-    node)      echo "NODE_URL|tar.xz|1|bin" ;;
-    python)    echo "PYTHON_URL|tar.gz|0|bin" ;;   # install_only: already bin/
-    rust)      echo "RUST_URL|tar.gz|0|" ;;         # install.sh populates the prefix
-    java)      echo "JDK_URL|tar.gz|1|bin" ;;
-    java25)    echo "JDK25_URL|tar.gz|1|bin" ;;
-    kotlin)    echo "KOTLIN_URL|zip|1|bin" ;;
-    scala)     echo "SCALA_CLI_URL|gz|0|bin/scala-cli;SBT_URL|tar.gz|1|bin" ;;
-    groovy)    echo "GROOVY_URL|zip|1|bin" ;;
-    clojure)   echo "CLOJURE_URL|tar.gz|1|bin" ;;
-    dart)      echo "DART_URL|zip|1|bin" ;;
-    dotnet)    echo "DOTNET_URL|tar.gz|1|" ;;       # sdk/ + dotnet at root
-    elixir)    echo "OTP_URL|tar.gz|1|bin;ELIXIR_URL|zip|1|bin;HEX_URL|zip|1|;HEXKEY_URL|raw|0|" ;;
-    gleam)     echo "GLEAM_URL|tar.gz|1|." ;;
-    php)       echo "PHP_URL|tar.gz|1|.;COMPOSER_URL|phar|0|" ;;
-    ruby)      echo "RUBY_URL|tar.gz|1|bin" ;;
-    swift)     echo "SWIFT_URL|tar.gz|1|usr/bin" ;;
-    zig)       echo "ZIG_URL|tar.xz|1|." ;;
-    bun)       echo "BUN_URL|zip|1|." ;;
-    deno)      echo "DENO_URL|zip|1|." ;;
-    julia)     echo "JULIA_URL|tar.gz|1|bin" ;;
-    crystal)   echo "CRYSTAL_URL|tar.gz|1|bin" ;;
-    ocaml)     echo "OPAM_URL|raw|0|" ;;            # single-file installer
-    haskell)   echo "GHCUP_URL|raw|0|" ;;           # single-file installer
-    lua)       echo "LUA_URL|tar.gz|1|src;LUAROCKS_URL|tar.gz|1|bin" ;;
-    perl)      echo "CPANM_URL|tar.gz|1|bin" ;;
-    r)         echo "R_URL|tar.gz|1|bin" ;;
-    conda)     echo "CONDA_URL|raw|0|" ;;           # .sh installer
-    pixi)      echo "PIXI_URL|raw|0|" ;;            # single static binary
-    godot)     echo "GODOT_URL|zip|1|." ;;
-    clang)     echo "CMAKE_URL|tar.gz|1|bin;NINJA_URL|zip|1|." ;;
-    *)         return 1 ;;
-  esac
-}
-requires() {
-  case "$1" in
-    kotlin|groovy|clojure|scala) echo "java25" ;;
-    *) echo "" ;;
-  esac
-}
-install_argv() {
-  case "$1" in
-    rust) echo "./install.sh --prefix={root} --disable-ldconfig" ;;
-    haskell) echo "{root}/ghcup" ;;
-    *) echo "" ;;
-  esac
-}
-
-# cache_name <var> mirrors fetch-artifacts.sh (the hex key is the one rename).
-cache_name() {
-  case "$1" in
-    HEXKEY_URL) echo "registry-public-key.pem" ;;
-    *) local u="${!1%%\?*}"; u="${u##*/}"; echo "${u//%2B/+}" ;;
-  esac
-}
-
 # json_str: minimal JSON string escape (URLs/paths are plain ASCII here).
 json_str() { printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
 
-emit() {
-  local lang="$1" specs="$2" req="$3" inst="$4"
-  local first_spec=1 art_out=""
-  local IFS=';'
-  for spec in $specs; do
+# artifact_url <lang> <version> <file>
+artifact_url() { printf '%s/artifacts/generic/toolchains/%s/%s/%s' "${ARTIFACT%/}" "$1" "$2" "$3"; }
+
+# built_tarball_name <lang> -> the single file publish-artifacts.sh uploads.
+built_tarball_name() { echo "toolchain.tar.gz"; }
+
+# artifacts_json <lang> <version> <kind> -> a JSON array of artifact objects.
+artifacts_json() {
+  local lang="$1" ver="$2" kind="$3" out="" first=1 spec
+  if [ "$kind" = "build" ]; then
+    local file path sha
+    file="$(built_tarball_name "$lang")"
+    path="${BUILT_DIR}/${lang}/${ver}/${file}"
+    if [ ! -s "$path" ]; then echo "missing built tarball $path (run ./publish-artifacts.sh $lang)" >&2; exit 1; fi
+    sha="$(sha256sum "$path" | awk '{print $1}')"
+    out="{\"url\":$(json_str "$(artifact_url "$lang" "$ver" "$file")"),\"sha256\":\"$sha\",\"format\":\"tar.gz\",\"strip\":0,\"bin\":$(json_str "$(toolchain_build_bin "$lang")")}"
+  else
+    local IFS=';'
+    for spec in $(toolchain_specs "$lang"); do
+      unset IFS
+      local var="${spec%%|*}" rest="${spec#*|}"
+      local format="${rest%%|*}" rest2="${rest#*|}"
+      local strip="${rest2%%|*}" rest3="${rest2#*|}"
+      local bin="${rest3%%|*}" rename="${rest3#*|}"
+      [ "$rename" = "$rest3" ] && rename=""   # no 5th (rename) field
+      local url="${!var-}"
+      [ -n "$url" ] || { echo "missing url var $var for $lang" >&2; exit 1; }
+      local file; file="$(toolchain_cache_name "$var")"
+      local path="${CACHE}/${file}"
+      if [ ! -s "$path" ]; then echo "missing cache artifact $file for $lang (run ./fetch-artifacts.sh $lang)" >&2; exit 1; fi
+      local sha; sha="$(sha256sum "$path" | awk '{print $1}')"
+      local ren=""
+      [ -n "$rename" ] && ren=",\"rename\":$(json_str "$rename")"
+      [ "$first" -eq 1 ] || out+=","
+      first=0
+      out+="{\"url\":$(json_str "$(artifact_url "$lang" "$ver" "$file")"),\"sha256\":\"$sha\",\"format\":\"$format\",\"strip\":$strip,\"bin\":$(json_str "$bin")$ren}"
+      IFS=';'
+    done
     unset IFS
-    local var="${spec%%|*}" rest="${spec#*|}"
-    local format="${rest%%|*}" rest2="${rest#*|}"
-    local strip="${rest2%%|*}" bin="${rest2#*|}"
-    local url="${!var-}"
-    if [ -z "$url" ]; then echo "missing url var $var for $lang" >&2; exit 1; fi
-    local file; file="$(cache_name "$var")"
-    local path="${CACHE}/${file}"
-    if [ ! -s "$path" ]; then echo "missing cache artifact $file for $lang (run ./fetch-artifacts.sh $lang)" >&2; exit 1; fi
-    local sha; sha="$(sha256sum "$path" | awk '{print $1}')"
-    [ "$first_spec" -eq 1 ] || art_out+=","
-    first_spec=0
-    art_out+="{\"url\":$(json_str "$url"),\"sha256\":\"$sha\",\"format\":\"$format\",\"strip\":$strip,\"bin\":$(json_str "$bin")}"
-    IFS=';'
-  done
-  unset IFS
-
-  local req_json="[]"
-  if [ -n "$req" ]; then req_json="[$(printf '%s' "$req" | awk -F, '{for(i=1;i<=NF;i++){printf "%s\"%s\"",(i>1?",":""),$i}}')]"; fi
-  local inst_json=""
-  if [ -n "$inst" ]; then
-    inst_json=",\"install\":[$(printf '%s' "$inst" | awk '{for(i=1;i<=NF;i++){printf "%s\"%s\"",(i>1?",":""),$i}}')]"
   fi
-
-  # Version key: the pinned version (kept explicit; the URL parse is ambiguous
-  # across the many upstream naming schemes).
-  local ver; ver="$(version_of "$lang")"
-
-  printf '    %s: {"requires": %s, "versions": {"%s": {"artifacts": [%s]%s}}}\n' \
-    "$(json_str "$lang")" "$req_json" "$ver" "$art_out" "$inst_json"
+  printf '[%s]' "$out"
 }
 
-# version_of <lang>: the pinned version for the index key. Kept explicit (the
-# URL parse is ambiguous across the many naming schemes).
-version_of() {
-  case "$1" in
-    go) echo "1.27.1" ;; node) echo "26.9.0" ;; python) echo "3.14.7" ;;
-    rust) echo "1.98.1" ;; java) echo "26.0.2.1" ;; java25) echo "25.0.4.1" ;;
-    kotlin) echo "2.4.20" ;; scala) echo "1.17.1" ;; groovy) echo "4.0.33" ;;
-    clojure) echo "1.12.6.1673" ;; dart) echo "3.13.4" ;; dotnet) echo "10.0.401" ;;
-    elixir) echo "1.20.4" ;; gleam) echo "1.18.1" ;; php) echo "8.5.8" ;;
-    ruby) echo "4.0.7" ;; swift) echo "6.4.0" ;; zig) echo "0.16.0" ;;
-    bun) echo "1.4.2" ;; deno) echo "2.9.7" ;; julia) echo "1.13.0" ;;
-    crystal) echo "1.21.0" ;; ocaml) echo "2.6.0" ;; haskell) echo "0.2.6.2" ;;
-    lua) echo "5.5.1" ;; perl) echo "1.7049" ;; r) echo "4.6.1" ;;
-    conda) echo "latest" ;; pixi) echo "latest" ;; godot) echo "4.7.2" ;;
-    clang) echo "4.4.3" ;; *) echo "unknown" ;;
-  esac
+# json_array <comma-separated> -> ["a","b"]
+json_array() {
+  local s="$1"
+  [ -n "$s" ] || { printf '[]'; return; }
+  printf '[%s]' "$(printf '%s' "$s" | awk -F, '{for(i=1;i<=NF;i++){printf "%s\"%s\"",(i>1?",":""),$i}}')"
 }
+
+emit() {
+  local lang="$1" ver kind req arts
+  ver="$(toolchain_version "$lang")"
+  kind="$(toolchain_kind "$lang")"
+  req="$(toolchain_requires "$lang")"
+  # artifacts_json exits non-zero (hard stop) when a required cache artifact is
+  # missing; under `set -e` a failing assignment aborts the whole generation
+  # rather than emitting a partial/invalid index.
+  arts="$(artifacts_json "$lang" "$ver" "$kind")"
+  printf '    %s: {"requires": %s, "versions": {"%s": {"artifacts": %s}}}\n' \
+    "$(json_str "$lang")" "$(json_array "$req")" "$ver" "$arts"
+}
+
+# specs_ok <lang>: known to the shared metadata (has a version).
+specs_ok() { [ "$(toolchain_version "$1")" != "unknown" ]; }
 
 generate() {
   echo "{"
   echo '  "schema": 1,'
   echo '  "toolchains": {'
   first=1
-  for lang in ${WORKSPACE_LANGS}; do
-    if ! specs="$(meta "$lang")"; then continue; fi
+  # LANGS: an explicit subset (env LANGS=… or positional args) overrides the
+  # published set, so a single toolchain can be regenerated.
+  for lang in ${LANGS:-${PUBLISHED_LANGS}}; do
+    specs_ok "$lang" || continue
     [ "$first" -eq 1 ] || echo ","
     first=0
-    emit "$lang" "$specs" "$(requires "$lang")" "$(install_argv "$lang")"
+    emit "$lang"
   done
   echo ""
   echo "  }"
@@ -181,13 +132,14 @@ generate() {
 }
 
 if [ "$PUBLISH" -eq 1 ]; then
-  A="${ARTIFACT:-http://artifact.worker.svc.cluster.local}"
   : "${ARTIFACT_TOKEN:?set ARTIFACT_TOKEN to publish}"
   tmp="$(mktemp)"
   generate > "$tmp"
+  jq -e . "$tmp" >/dev/null || { echo "generated index is not valid JSON" >&2; exit 1; }
   curl -fsS -X PUT -H "Authorization: Bearer ${ARTIFACT_TOKEN}" \
-    --data-binary "@${tmp}" "${A}/artifacts/generic/toolchains/index.json"
+    --data-binary "@${tmp}" "${ARTIFACT%/}/artifacts/generic/toolchains/index.json"
   rm -f "$tmp"
+  echo "published ${ARTIFACT%/}/artifacts/generic/toolchains/index.json"
 elif [ -n "$OUT" ]; then
   generate > "$OUT"
 else

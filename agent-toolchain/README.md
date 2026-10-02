@@ -26,6 +26,8 @@ build-toolchain.sh        build one language image (or `base`, or all)
 build-all.sh              build base + every WORKSPACE_LANGS entry, one at a time
 build-one.sh              detached single-image build with a log file
 build-index.sh            generate/publish the on-demand toolchain index (schema 1)
+publish-artifacts.sh      upload toolchain artifacts to the artifact generic store
+toolchain-meta.sh         shared tool list + per-language unpack metadata (sourced)
 mirror-images.sh          mirror pinned middleware images (middleware.env)
 middleware.Dockerfile     no-op FROM re-serve used by mirror-images.sh
 middleware.env            pinned shared middleware image refs
@@ -106,24 +108,32 @@ nats) that every tenant sees via `list-oci-images`. Bump a version there, then:
 ./mirror-images.sh postgres   # just one
 ```
 
-## On-demand toolchain index
+## On-demand toolchains: publish + index
 
-`build-index.sh` generates the toolchain index the worker's on-demand installer
-consumes (schema + consumer contract: `abc-protocol/deploy/DEVELOP.md` →
-"Toolchain index"; implementation: `internal/toolchains`). It reads the same
-`toolchain/<distro>/urls.env` the image builds use and takes each sha256 from
-`cache/<distro>/`, so the index can never drift from the pinned artifacts:
+The on-demand installer's tool list + per-language unpack metadata live in
+**`toolchain-meta.sh`** (one place, sourced by both scripts below). The versions
+are pinned by `toolchain/<distro>/urls.env` (the same source the image builds
+use). `PUBLISHED_LANGS` is the installable set; a language not in it is absent
+from the index.
 
 ```sh
-./fetch-artifacts.sh          # populate cache/<distro>/ (sha256 source)
-./build-index.sh              # print index.json to stdout
-./build-index.sh -o index.json
-ARTIFACT_TOKEN=<token> ./build-index.sh --publish   # PUT to the artifact mount
+./fetch-artifacts.sh                     # populate cache/<distro>/ (sha256 source)
+ARTIFACT_TOKEN=<token> ./publish-artifacts.sh   # upload artifacts + publish index
+./build-index.sh                         # print index.json to stdout
+./build-index.sh -o index.json           # write to a file
+ARTIFACT_TOKEN=<token> ./build-index.sh --publish
 ```
 
-The per-language unpack metadata (format/strip/bin/requires/install) is derived
-from each language's Dockerfile install logic — keep it in sync when a
-Dockerfile's unpack changes.
+`publish-artifacts.sh` uploads each `(lang, version)` to the shared artifact
+generic store (`$ARTIFACT/artifacts/generic/toolchains/<lang>/<version>/<file>`,
+idempotent). As-is toolchains are uploaded verbatim; `--build` handles the
+install.sh/compile kinds (phase 2). `build-index.sh` then emits the index whose
+`url`s point at those paths, with sha256 from the local cache. Schema + consumer
+contract: `abc-protocol/deploy/DEVELOP.md` → "Toolchain index"; implementation:
+`internal/toolchains`.
+
+strip/bin/rename mirror each `Dockerfile.<lang>`'s unpack — keep them in sync
+when a Dockerfile's unpack changes.
 
 ## Notes
 
