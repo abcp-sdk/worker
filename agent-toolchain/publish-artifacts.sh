@@ -79,8 +79,21 @@ require_token() {
 }
 
 # ---- as-is toolchains --------------------------------------------------------
+# Some as-is upstreams need shared libs their Dockerfile apt-installs (swift).
+# The publisher apt-installs `toolchain_deps` in its OWN build container first.
+install_deps() { # lang
+  local pkgs; pkgs="$(toolchain_deps "$1")"
+  [ -n "$pkgs" ] || return 0
+  if [ "$DRY" -eq 1 ]; then echo "  [dry-run] apt-get install $pkgs"; return 0; fi
+  echo "  deps: apt-get install $pkgs"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -o Acquire::Retries=5 update >/dev/null 2>&1
+  apt-get -o Acquire::Retries=5 install -y --no-install-recommends $pkgs >/dev/null 2>&1
+}
+
 publish_as_is() { # lang
   local lang="$1" ver spec
+  install_deps "$lang"
   ver="$(toolchain_version "$lang")"
   local IFS=';'
   for spec in $(toolchain_specs "$lang"); do
