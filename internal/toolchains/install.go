@@ -168,18 +168,31 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 		return binDirs(dir, v), nil
 	}
 
-	tmp := dir + ".tmp"
-	cleanup := func() { _ = os.RemoveAll(tmp) }
-	if err := os.RemoveAll(tmp); err != nil {
+	// install_prefix marks an INSTALLER that bakes its output path into the
+	// installed files (Miniconda rewrites every script's shebang to the prefix).
+	// Such a toolchain cannot be unpacked to `.tmp` and renamed — install it IN
+	// PLACE (accepting that a failed install leaves a partial dir, which is then
+	// cleaned up). Everything else uses the atomic tmp+rename path.
+	inPlace := v.InstallPrefix != ""
+	work := dir + ".tmp"
+	if inPlace {
+		work = dir
+	}
+	cleanup := func() {
+		if !inPlace {
+			_ = os.RemoveAll(work)
+		}
+	}
+	if err := os.RemoveAll(work); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
+	if err := os.MkdirAll(work, 0o755); err != nil {
 		return nil, err
 	}
 	// unpack_dir: unpack into a subdir (installers that refuse their own dir).
-	unpackDest := tmp
+	unpackDest := work
 	if v.UnpackDir != "" {
-		unpackDest = filepath.Join(tmp, v.UnpackDir)
+		unpackDest = filepath.Join(work, v.UnpackDir)
 		if err := os.MkdirAll(unpackDest, 0o755); err != nil {
 			cleanup()
 			return nil, err
@@ -203,19 +216,23 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 		}
 	}
 	if len(v.Install) > 0 {
-		// {root} expands to the VERSION ROOT (tmp); cwd is the unpack dir.
-		if err := runInstall(v.Install, tmp, unpackDest, in.logf); err != nil {
+		// {root} expands to the INSTALL prefix (version root, or
+		// <root>/<install_prefix>); cwd is the unpack dir.
+		installRoot := installBase(work, v.InstallPrefix)
+		if err := runInstall(v.Install, installRoot, unpackDest, in.logf); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("%s@%s install: %w", name, ver, err)
 		}
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		cleanup()
-		return nil, err
-	}
-	if err := os.Rename(tmp, dir); err != nil {
-		cleanup()
-		return nil, err
+	if !inPlace {
+		if err := os.RemoveAll(dir); err != nil {
+			cleanup()
+			return nil, err
+		}
+		if err := os.Rename(work, dir); err != nil {
+			cleanup()
+			return nil, err
+		}
 	}
 	if err := os.WriteFile(filepath.Join(dir, markerName), []byte("ok\n"), 0o644); err != nil {
 		return nil, err
@@ -257,6 +274,15 @@ func applyEnv(root string, env map[string]string) {
 		}
 		_ = os.Setenv(name, expandRoot(val, root))
 	}
+}
+
+// installBase resolves the install prefix: the version root, or
+// <version-root>/<prefix> when InstallPrefix is set.
+func installBase(root, prefix string) string {
+	if prefix == "" {
+		return root
+	}
+	return filepath.Join(root, prefix)
 }
 
 // fetchArtifact downloads one file, verifies its sha256, and unpacks it into
@@ -397,9 +423,10 @@ func platformArtifacts(all []Artifact, goos, goarch string) []Artifact {
 
 // binDirs computes the PATH dirs for an installed version.
 func binDirs(root string, v Version) []string {
-	// `bin` is always relative to the VERSION ROOT (install[] writes there;
-	// unpack_dir is only the scratch location for the archive + install cwd).
-	base := root
+	// `bin` is relative to the INSTALL prefix (version root, or
+	// <root>/<install_prefix>); unpack_dir is only the scratch location for the
+	// archive + install cwd.
+	base := installBase(root, v.InstallPrefix)
 	var out []string
 	add := func(p string) {
 		if p != "" {

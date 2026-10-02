@@ -137,7 +137,7 @@ json_array() {
 }
 
 emit() {
-  local lang="$1" ver kind req arts inst env ud extra=""
+  local lang="$1" ver kind req arts inst env ud ip extra=""
   ver="$(toolchain_version "$lang")"
   kind="$(toolchain_kind "$lang")"
   req="$(toolchain_requires "$lang")"
@@ -148,9 +148,12 @@ emit() {
   inst="$(toolchain_install "$lang")"
   env="$(toolchain_env "$lang")"
   ud="$(toolchain_unpack_dir "$lang")"
-  [ -n "$inst" ] && extra+=", \"install\": $(json_argv "$inst")"
+  ip="$(toolchain_install_prefix "$lang")"
+  # install is a SHELL command -> argv ["sh","-c",<cmd>] (so &&/pipes/quoting work).
+  [ -n "$inst" ] && extra+=", \"install\": [\"sh\", \"-c\", $(json_str "$inst")]"
   [ -n "$env" ] && extra+=", \"env\": $(json_env "$env")"
   [ -n "$ud" ] && extra+=", \"unpack_dir\": $(json_str "$ud")"
+  [ -n "$ip" ] && extra+=", \"install_prefix\": $(json_str "$ip")"
   printf '    %s: {"requires": %s, "versions": {"%s": {"artifacts": %s%s}}}\n' \
     "$(json_str "$lang")" "$(json_array "$req")" "$ver" "$arts" "$extra"
 }

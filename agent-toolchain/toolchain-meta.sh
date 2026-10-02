@@ -30,6 +30,9 @@
 #                              run install[] from (default "" = the root itself).
 #                              Needed when the installer refuses its own dir
 #                              (rust/clojure install.sh).
+#   toolchain_install_prefix <lang> subdir under the version root that install[]
+#                              and `bin` resolve against (the installer's OUTPUT
+#                              dir; default "" = the version root). E.g. conda.
 #
 # strip/bin/rename/install/env/unpack_dir mirror each Dockerfile.<lang>'s unpack
 # (validate against it before trusting a new entry).
@@ -42,7 +45,7 @@
 # (apt.llvm.org + conan wheels), java + swift (very large images), conda (its
 # installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
 # based), perl (cpanm's `#!perl` shebang needs the Dockerfile's make-install).
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot}"
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot erlang elixir conda clojure perl}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
@@ -52,6 +55,7 @@ toolchain_version() {
     kotlin) echo "2.4.20" ;; scala) echo "1.17.1" ;; groovy) echo "4.0.33" ;;
     clojure) echo "1.12.6.1673" ;; dart) echo "3.13.4" ;; dotnet) echo "10.0.401" ;;
     elixir) echo "1.20.4" ;; gleam) echo "1.18.1" ;; php) echo "8.5.8" ;;
+    erlang) echo "29.1" ;;
     ruby) echo "4.0.7" ;; swift) echo "6.4.0" ;; zig) echo "0.16.0" ;;
     bun) echo "1.4.2" ;; deno) echo "2.9.7" ;; julia) echo "1.13.0" ;;
     crystal) echo "1.21.0" ;; ocaml) echo "2.6.0" ;; haskell) echo "0.2.6.2" ;;
@@ -66,6 +70,7 @@ toolchain_version() {
 toolchain_requires() {
   case "$1" in
     kotlin|groovy|clojure|scala) echo "java25" ;;
+    elixir|gleam) echo "erlang" ;;
     *) echo "" ;;
   esac
 }
@@ -117,9 +122,14 @@ toolchain_specs() {
     godot)   echo "GODOT_URL|zip|0|." ;;
     # rust/elixir/clojure/conda are as-is too, but need an install[] step (below).
     rust)    echo "RUST_URL|tar.gz|1|bin" ;;                 # install.sh --prefix={root} populates bin/
-    elixir)  echo "OTP_URL|tar.gz|1|bin;ELIXIR_URL|zip|1|bin;HEX_URL|zip|1|lib/elixir/lib/hex/hex.ez;HEXKEY_URL|raw|0|lib/elixir/lib/hex/hex-registry-public-key.pem" ;;
+    # erlang (OTP) and elixir are SEPARATE toolchains: erlang is its own
+    # relocatable build (its ./Install populates bin/), elixir requires it.
+    erlang)  echo "OTP_URL|tar.gz|1|bin" ;;                  # ./Install writes {root}/bin (install[])
+    elixir)  echo "ELIXIR_URL|zip|0|bin" ;;                  # zip root is bin/ (no top dir) -> strip 0
     clojure) echo "CLOJURE_URL|tar.gz|1|bin" ;;
-    conda)   echo "CONDA_URL|raw|0|miniconda/bin/miniconda.sh" ;;  # installer; installs into {root}/miniconda
+    # conda: raw installer script placed at {root}/bin/miniconda.sh; it installs
+    # into the fresh {root}/miniconda (install_prefix), whose bin/ joins PATH.
+    conda)   echo "CONDA_URL|raw|0|bin/miniconda.sh" ;;
     # phase 2b (source compile): publisher ships ONE relocatable tarball.
     lua|r)   echo "" ;;
     *) return 1 ;;
@@ -131,11 +141,20 @@ toolchain_specs() {
 toolchain_install() {
   case "$1" in
     rust)    echo "./install.sh --prefix={root} --without=rust-docs --disable-ldconfig" ;;
-    elixir)  echo "./Install -minimal {root}" ;;
-    clojure) echo "./install.sh {root}" ;;  # phase 2b: upstream install.sh is sed/ruby-based
-    # The Miniconda installer REFUSES an existing prefix, so it installs into a
-    # fresh subdir ({root}/miniconda); `bin` then points at that subdir's bin.
-    conda)   echo "bash {root}/miniconda/bin/miniconda.sh -b -p {root}/miniconda" ;;
+    # erlang: OTP's ./Install writes a relocatable tree into {root}.
+    erlang)  echo "./Install -minimal {root}" ;;
+    # clojure: the upstream install.sh is sed/ruby-based; do what Dockerfile.clojure
+    # does inline (copy jars to libexec, write a java-launching shim).
+    # The shim must NOT bake the install-time path: install[] runs in the .tmp
+    # dir, which is then atomically renamed — a hardcoded path would go stale.
+    # Use a RELATIVE classpath (java's `dir/*` expands to every jar) so it stays
+    # valid after the rename.
+    clojure) echo "mkdir -p {root}/libexec {root}/bin && cp ./*.jar {root}/libexec/ && cp deps.edn example-deps.edn tools.edn {root}/ && printf '#!/bin/sh\nexec java -cp \"\$(dirname \"\$0\")/../libexec/*\" clojure.main \"\$@\"\n' > {root}/bin/clojure && chmod 755 {root}/bin/clojure" ;;
+    # perl: App::cpanminus, built+installed to the prefix (INSTALL_BASE).
+    perl)    echo "perl Makefile.PL INSTALL_BASE={root} && make && make install" ;;
+    # cwd = version root; the installer REFUSES an existing prefix, so it
+    # installs into the fresh ./miniconda (install_prefix).
+    conda)   echo "bash bin/miniconda.sh -b -p miniconda" ;;
     godot)   echo "chmod 755 {root}/Godot_v4.7.2-stable_linux.x86_64" ;;
     *) echo "" ;;
   esac
@@ -147,6 +166,8 @@ toolchain_install() {
 toolchain_env() {
   case "$1" in
     ruby) echo "LD_LIBRARY_PATH={root}/x64/lib" ;;
+    # perl: INSTALL_BASE puts App::cpanminus under {root}/lib/perl5; put it on @INC.
+    perl) echo "PERL5LIB={root}/lib/perl5" ;;
     # crystal derives its worker pool from the host CPU inventory, which
     # overflows inside a container on a very large node (see Dockerfile.crystal).
     crystal) echo "CRYSTAL_WORKERS=4" ;;
@@ -157,7 +178,15 @@ toolchain_env() {
 # ---- unpack subdir (install.sh refuses its own directory) -------------------
 toolchain_unpack_dir() {
   case "$1" in
-    rust|clojure) echo "dist" ;;
+    rust|clojure|perl) echo "dist" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---- install prefix (installer's OUTPUT dir) --------------------------------
+toolchain_install_prefix() {
+  case "$1" in
+    conda) echo "miniconda" ;;
     *) echo "" ;;
   esac
 }

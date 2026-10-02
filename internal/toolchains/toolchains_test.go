@@ -390,3 +390,38 @@ func TestEnsureExecutableBit(t *testing.T) {
 		t.Fatalf("cpanm not executable: %v", fi.Mode())
 	}
 }
+
+// TestEnsureInstallPrefix: install[]'s {root} and `bin` resolve against
+// <version-root>/<install_prefix> (the installer's OUTPUT dir) — conda's shape.
+func TestEnsureInstallPrefix(t *testing.T) {
+	// raw installer script that writes <prefix>/bin/tool, refusing an existing prefix.
+	blob := []byte("#!/bin/sh\np=\"$3\"\n[ ! -e \"$p\" ] || { echo exists >&2; exit 1; }\nmkdir -p \"$p/bin\"; touch \"$p/bin/tool\"\n")
+	idxURL, _ := serveIndex(t, map[string][]byte{"inst.sh": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"conda": map[string]any{"versions": map[string]any{
+				"latest": map[string]any{
+					"artifacts": []any{map[string]any{
+						"url": base + "/blobs/inst.sh", "sha256": sha(blob), "format": "raw", "strip": 0, "bin": "bin/inst.sh"}},
+					"install":        []string{"sh", "-c", "bash bin/inst.sh -b -p miniconda"},
+					"install_prefix": "miniconda",
+				},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	bins, err := in.Ensure(context.Background(), []Spec{{Name: "conda", Version: "latest"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// bin is relative to <root>/miniconda -> <root>/miniconda/bin.
+	want := filepath.Join(root, "conda", "latest", "miniconda", "bin")
+	if len(bins) != 1 || bins[0] != want {
+		t.Fatalf("bins=%v want [%s]", bins, want)
+	}
+	if _, err := os.Stat(filepath.Join(want, "tool")); err != nil {
+		t.Fatalf("install did not populate the prefix bin: %v", err)
+	}
+}
