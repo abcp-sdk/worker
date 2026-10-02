@@ -60,6 +60,10 @@ It produces VS Build Tools 2022 (17.14.x), MSVC 14.44.x, Windows SDK
 10.0.22621 + 10.0.26100 (+ Kits 8.1) and .NET SDK 10.0.x. The launcher then
 boot-fetches xa11y as on `base`, so `devtools` also has computer-use.
 
+The disk also carries **git** (installed by `guest/oem-install.bat` via winget):
+the Flutter SDK checks out through git, and most dev jobs need it. It is
+best-effort — a bake without internet simply skips it.
+
 ## Building
 
 ```sh

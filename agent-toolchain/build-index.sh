@@ -78,8 +78,12 @@ artifacts_json() {
       local var="${spec%%|*}" rest="${spec#*|}"
       local format="${rest%%|*}" rest2="${rest#*|}"
       local strip="${rest2%%|*}" rest3="${rest2#*|}"
-      local bin="${rest3%%|*}" rename="${rest3#*|}"
-      [ "$rename" = "$rest3" ] && rename=""   # no 5th (rename) field
+      local bin="${rest3%%|*}" rest4="${rest3#*|}"
+      local rename="${rest4%%|*}" rest5="${rest4#*|}"
+      [ "$rename" = "$rest4" ] && rename=""   # no rename field
+      local os="${rest5%%|*}" arch="${rest5#*|}"
+      [ "$os" = "$rest5" ] && os=""            # no os field
+      [ "$arch" = "$rest5" ] && arch=""        # no arch field
       local url="${!var-}"
       [ -n "$url" ] || { echo "missing url var $var for $lang" >&2; exit 1; }
       local file; file="$(toolchain_cache_name "$var")"
@@ -87,7 +91,9 @@ artifacts_json() {
       if [ ! -s "$path" ]; then echo "missing cache artifact $file for $lang (run ./fetch-artifacts.sh $lang)" >&2; exit 1; fi
       local sha; sha="$(sha256sum "$path" | awk '{print $1}')"
       local ren=""
-      [ -n "$rename" ] && ren=",\"rename\":$(json_str "$rename")"
+      [ -n "$rename" ] && ren+=",\"rename\":$(json_str "$rename")"
+      [ -n "$os" ] && ren+=",\"os\":$(json_str "$os")"
+      [ -n "$arch" ] && ren+=",\"arch\":$(json_str "$arch")"
       [ "$first" -eq 1 ] || out+=","
       first=0
       out+="{\"url\":$(json_str "$(artifact_url "$lang" "$ver" "$file")"),\"sha256\":\"$sha\",\"format\":\"$format\",\"strip\":$strip,\"bin\":$(json_str "$bin")$ren}"

@@ -88,6 +88,11 @@ fi
 # launchd-spawned process gets only the bare system PATH.
 export PATH="/usr/local/bin:$PATH"
 
+# On-demand toolchains: the guest can only reach the container (host.lan:8090),
+# whose nginx bridges /artifacts/ to the in-cluster artifact registry — so the
+# worker's installer fetches toolchains through that bridge.
+export WORKER_TOOLCHAIN_INDEX="http://host.lan:8090/artifacts/generic/toolchains/index/index.json"
+
 # Agent path: already inside docker's Aqua session.
 if [ "$(id -un)" = "docker" ]; then
   exec "$BIN" -addr 0.0.0.0:48080 -workspace "$WS" -db "$WS/jobs.db"

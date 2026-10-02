@@ -81,6 +81,11 @@ rem job, ...). Without a supervisor the task ends and the worker stays down
 rem until the next logon — losing the sandbox. Loop it, with a short backoff
 rem so a crash-on-start cannot spin the CPU. (macOS gets the same effect from
 rem launchd's KeepAlive.)
+rem
+rem On-demand toolchains: the guest can only reach the container (host.lan:8090),
+rem whose nginx bridges /artifacts/ to the in-cluster artifact registry — so the
+rem worker's installer fetches toolchains through that bridge.
+set "WORKER_TOOLCHAIN_INDEX=http://host.lan:8090/artifacts/generic/toolchains/index/index.json"
 set /a RESTARTS=0
 :run
 >>"%LOG%" echo [%DATE% %TIME%] launcher: starting worker as %USERNAME% (%BIN%)

@@ -282,6 +282,24 @@ java25).
 `#!perl` shebang needs the Dockerfile's make-install). GPU/pip chains and
 VM/desktop images stay images (never runtime-installed).
 
+### Platform-aware index (`os`/`arch`) + the VM toolchain bridge
+
+A toolchain may carry `os`/`arch` on its artifacts (empty = wildcard). A single
+index then serves linux AND windows/macos: the installer picks the artifact
+matching its own `GOOS`/`GOARCH` (`platformArtifacts`). `flutter` is the first
+user — four relocatable SDKs (`linux/amd64`, `windows/amd64`, `darwin/amd64`,
+`darwin/arm64`), all plain unpack. `Toolchain.os` additionally GATES install:
+e.g. `os: ["windows","darwin"]` makes a linux sandbox refuse it with a clear
+error instead of installing something useless.
+
+**VM guest → artifact**: a VM guest can only reach the container at
+`host.lan:8090` (the token bridge), NOT the cluster. The VM images' nginx
+(`vm/{windows,macos}/00-token.conf`) therefore also proxies `/artifacts/` to
+`artifact.worker.svc.cluster.local`, and the guest launcher sets
+`WORKER_TOOLCHAIN_INDEX=http://host.lan:8090/artifacts/generic/toolchains/index/index.json`.
+So a VM sandbox installs toolchains through that bridge (slow for big ones —
+rust ~1.5G / julia ~800M / flutter ~1.5–2.2G — but works).
+
 ### Published = runtime-installable; sandbox images are slimmed
 
 **Phase 1 + phase 2 are PUBLISHED** (2026-10-02) to the artifact store

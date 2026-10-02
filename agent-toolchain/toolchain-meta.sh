@@ -14,10 +14,13 @@
 #       build  = needs install.sh / a compile (PHASE 2): the publisher builds
 #                once with the final prefix and ships the result.
 #   toolchain_specs <lang>     one line per UPSTREAM cache artifact (as-is):
-#                                <URLVAR>|<format>|<strip>|<bin>[|<rename>]
+#                                <URLVAR>|<format>|<strip>|<bin>[|<rename>[|<os>|<arch>]]
 #       bin     relative to the version root ("{root}" allowed)
 #       rename  "src->dst" (both relative to the version root, applied after
 #               strip), e.g. dart: "dart-sdk->dart"
+#       os/arch restrict the artifact to a platform (empty = any) — a version
+#               may list one artifact per platform; the installer picks the
+#               ones matching its own GOOS/GOARCH.
 #   toolchain_install <lang>   space-separated argv run after unpacking
 #                              ("{root}" expands to the version dir), e.g.
 #                              rust: "./install.sh --prefix={root} …". Empty = none.
@@ -40,7 +43,7 @@
 # installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
 # based), godot (needs the OS fontconfig package), perl (cpanm's `#!perl`
 # shebang needs the Dockerfile's make-install) — not pure unpack.
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust}"
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
@@ -54,6 +57,7 @@ toolchain_version() {
     bun) echo "1.4.2" ;; deno) echo "2.9.7" ;; julia) echo "1.13.0" ;;
     crystal) echo "1.21.0" ;; ocaml) echo "2.6.0" ;; haskell) echo "0.2.6.2" ;;
     lua) echo "5.5.1" ;; perl) echo "1.7049" ;; r) echo "4.6.1" ;;
+    flutter) echo "3.47.6" ;;
     conda) echo "latest" ;; pixi) echo "latest" ;; godot) echo "4.7.2" ;;
     clang) echo "4.4.3" ;; *) echo "unknown" ;;
   esac
@@ -101,6 +105,7 @@ toolchain_specs() {
     groovy)  echo "GROOVY_URL|zip|1|bin" ;;
     gleam)   echo "GLEAM_URL|tar.gz|1|." ;;
     ruby)    echo "RUBY_URL|tar.gz|0|x64/bin" ;;             # ruby-builder layout: x64/{bin,lib}; + env
+    flutter) echo "FLUTTER_LINUX_URL|tar.xz|1|bin||linux|amd64;FLUTTER_WINDOWS_URL|zip|1|bin||windows|amd64;FLUTTER_MACOS_URL|zip|1|bin||darwin|amd64;FLUTTER_MACOS_ARM64_URL|zip|1|bin||darwin|arm64" ;;
     swift)   echo "SWIFT_URL|tar.gz|1|usr/bin" ;;
     deno)    echo "DENO_URL|zip|0|." ;;                     # zip root holds `deno`
     julia)   echo "JULIA_URL|tar.gz|1|bin" ;;

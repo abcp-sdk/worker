@@ -29,5 +29,12 @@ rem Register the AgentWorker task: Docker user, HIGHEST, interactive, at logon.
 schtasks /delete /tn AgentWorker /f >> "%LOG%" 2>&1
 schtasks /create /tn AgentWorker /tr "cmd /c %W%\worker-launch.cmd" /sc onlogon /ru Docker /rp admin /rl HIGHEST /it /f >> "%LOG%" 2>&1
 
+rem git: needed by the Flutter SDK (it checks out via git) and general dev jobs.
+rem Best-effort — a machine without internet (or without winget) just skips it.
+where git >> "%LOG%" 2>&1 || (
+  winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements >> "%LOG%" 2>&1
+  set "PATH=%PATH%;C:\Program Files\Git\cmd"
+)
+
 echo === done %DATE% %TIME% === >> "%LOG%"
 endlocal
