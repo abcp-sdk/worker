@@ -12,17 +12,17 @@ org is not `SANDBOX_ORG` (default `sandbox`).
     ./build.sh base node python      # a subset
     ./build.sh base                  # just the base
 
-**The default set no longer includes the phase-1 languages** (`go node python
-java25 dotnet php dart kotlin zig bun pixi`): they are published to the artifact
-store and installed **on demand** by the worker (`WORKSPACE_TOOLCHAINS` →
-`internal/toolchains`), so baking them is redundant. `java25` is the exception —
-it stays because it is also the parent image of `kotlin/scala/clojure/groovy`
-(`<lang>.base` → `toolchain-java25`).
+**The default set no longer includes the PUBLISHED languages** — phase 1 (`go
+node python java25 dotnet php dart kotlin zig bun pixi`) and phase 2 (`scala
+groovy deno julia crystal ocaml haskell ruby rust`). They are published to the
+artifact store and installed **on demand** by the worker
+(`WORKSPACE_TOOLCHAINS` → `internal/toolchains`), so baking them is redundant.
+`java25` is the exception — it stays because it is also the parent image of
+`kotlin/scala/clojure/groovy` (`<lang>.base` → `toolchain-java25`).
 
-The default set is therefore the not-yet-installable toolchains: `base rust java
-java25 scala clojure groovy elixir gleam ruby swift clang deno julia crystal
-ocaml haskell lua perl r conda godot cuda torch vllm vllm-omni llamacpp
-comfyui` → `sandbox-<lang>:debian-trixie`. Phase-2 languages stay preinstalled
-(declaring one has nothing to install from yet).
+The default set is therefore the not-yet-published toolchains: `base java java25
+clojure elixir gleam swift clang lua perl r conda godot cuda torch vllm
+vllm-omni llamacpp comfyui` → `sandbox-<lang>:debian-trixie`. Phase-2b languages
+stay preinstalled (declaring one has nothing to install from yet).
 
 Re-run whenever the worker changes (a worker fix requires rebuilt images).
