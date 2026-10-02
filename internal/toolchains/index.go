@@ -34,6 +34,13 @@ type Toolchain struct {
 type Version struct {
 	Artifacts []Artifact `json:"artifacts"`
 	Install   []string   `json:"install"`
+	// Env is runtime environment applied after a successful install (e.g.
+	// ruby's LD_LIBRARY_PATH). Values may contain the "{root}" placeholder.
+	Env map[string]string `json:"env"`
+	// UnpackDir, when set, unpacks every artifact into <version-root>/<UnpackDir>
+	// (and runs install[] there). Needed when the installer refuses its own
+	// directory (rust/clojure install.sh).
+	UnpackDir string `json:"unpack_dir"`
 }
 
 // Artifact is one downloadable file of a version.
