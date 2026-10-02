@@ -272,6 +272,27 @@ bun pixi`. Phase 2 adds the build kinds (`rust elixir lua r clojure`) and the
 remaining pure-unpack langs. GPU/pip chains and VM/desktop images stay images
 (never runtime-installed).
 
+### Published = runtime-installable; sandbox images are slimmed
+
+**Phase 1 is PUBLISHED** (2026-10-02) to the artifact store
+(`…/generic/toolchains/index/index.json` + `…/generic/toolchains-<lang>/…`):
+`go node python java25 dotnet php dart kotlin zig bun pixi`. These are therefore
+**installable at runtime** and are **no longer baked into sandbox images** —
+`sandbox-images/build.sh`'s default `LANGS` drops them. `java25` is the ONE
+exception kept preinstalled: it is also the parent image of
+`kotlin/scala/clojure/groovy` (`<lang>.base` → `toolchain-java25`), so removing
+it would break those builds.
+
+**Phase-2 languages stay preinstalled** (declaring one has nothing to install
+from yet): `rust elixir clojure r lua`, the remaining pure-unpack langs
+(`swift julia crystal gleam groovy scala sbt cmake ninja godot deno ocaml
+haskell conda perl ruby …`), the ML chain, and the OS images. Do not trim those
+from `LANGS` until their phase-2 publish lands.
+
+The catalog (`agent-toolchain/WORKSPACE_LANGS`, i.e. the `toolchain-<lang>`
+images) is unchanged — only the SANDBOX default set is slimmed, because a
+phase-1 language no longer needs a prebuilt sandbox image.
+
 ## Known gotcha: `fetch-artifacts.sh` provenance
 
 `agent-toolchain/` was moved here from `workspace-gateway` (commit `91e6cc4`);

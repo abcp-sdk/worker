@@ -36,9 +36,21 @@ done
 no_proxy="${NO_PROXY}"
 export NO_PROXY no_proxy
 
-# Default set: every toolchain image the deployment publishes (mirrors the
-# `agent-toolchain` catalog). Pass explicit names to build a subset.
-LANGS="${*:-base node python go rust java java25 kotlin scala clojure groovy dart dotnet elixir gleam php ruby swift zig clang bun deno julia crystal ocaml haskell lua perl r conda pixi godot cuda torch vllm vllm-omni llamacpp comfyui}"
+# Default set: the toolchains that are NOT yet installable at runtime.
+#
+# Phase-1 languages (go/node/python/java25/dotnet/php/dart/kotlin/zig/bun/pixi)
+# are PUBLISHED to the artifact store and installed on demand by the worker
+# (WORKSPACE_TOOLCHAINS → internal/toolchains), so they are NOT baked into
+# sandbox images anymore. Everything else (phase 2: rust/elixir/clojure/R/lua/
+# the remaining pure-unpack langs; the ML chain; the OS images) is still
+# preinstalled — declaring it has nothing to install from.
+#
+# java25 stays: it is BOTH a phase-1 toolchain AND the parent of the
+# kotlin/scala/clojure/groovy images (`<lang>.base` → toolchain-java25), so
+# dropping it would break those builds. Keep it preinstalled (option (a)).
+#
+# Pass explicit names to build a subset.
+LANGS="${*:-base rust java java25 scala clojure groovy elixir gleam ruby swift clang deno julia crystal ocaml haskell lua perl r conda godot cuda torch vllm vllm-omni llamacpp comfyui}"
 
 echo "==> cross-compiling agent-worker (linux/amd64) from ${ROOT}"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
