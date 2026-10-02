@@ -267,10 +267,20 @@ layout is therefore **flat**: toolchain `<lang>@<ver>` → name `toolchains-<lan
 version `<ver>`, filename `<file>`; the index → name `toolchains`, version
 `index`, filename `index.json`.
 
-Phase 1 = pure-unpack only: `go node python java25 dotnet php dart kotlin zig
-bun pixi`. Phase 2 adds the build kinds (`rust elixir lua r clojure`) and the
-remaining pure-unpack langs. GPU/pip chains and VM/desktop images stay images
-(never runtime-installed).
+**Phase 1** = pure-unpack: `go node python java25 dotnet php dart kotlin zig bun
+pixi`. **Phase 2** = the rest, still "download → verify → unpack (+ optional
+`install[]` step / runtime `env[]`)" — no publisher-side build:
+`scala groovy deno julia crystal ocaml haskell ruby rust`. Together they cover
+`tar.gz`/`tar.xz`/`zip`/`gz`/`phar`/`raw`, `strip 0|1`, `rename`, multi-file,
+`install[]` (+`unpack_dir`), `env[]`, and `requires` (kotlin/clojure/scala →
+java25).
+
+**Phase 2b** (deferred; NOT published): `lua r` (source compile), `elixir gleam`
+(multi-part OTP build + hex), `clang` (apt.llvm.org + conan), `java swift`
+(very large images), `conda` (installer refuses a non-empty prefix), `clojure`
+(install.sh is sed/ruby-based), `godot` (needs OS fontconfig), `perl` (cpanm's
+`#!perl` shebang needs the Dockerfile's make-install). GPU/pip chains and
+VM/desktop images stay images (never runtime-installed).
 
 ### Published = runtime-installable; sandbox images are slimmed
 

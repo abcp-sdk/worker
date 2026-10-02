@@ -146,6 +146,7 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 	dir := filepath.Join(in.root, name, ver)
 	if hasMarker(dir) {
 		in.logf("toolchains: %s@%s already installed", name, ver)
+		applyEnv(dir, v.Env)
 		return binDirs(dir, v), nil
 	}
 	if err := os.MkdirAll(filepath.Join(in.root, name), 0o755); err != nil {
@@ -158,6 +159,7 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 	}
 	defer unlock()
 	if hasMarker(dir) { // another process finished while we waited
+		applyEnv(dir, v.Env)
 		return binDirs(dir, v), nil
 	}
 
@@ -169,20 +171,30 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		return nil, err
 	}
+	// unpack_dir: unpack into a subdir (installers that refuse their own dir).
+	unpackDest := tmp
+	if v.UnpackDir != "" {
+		unpackDest = filepath.Join(tmp, v.UnpackDir)
+		if err := os.MkdirAll(unpackDest, 0o755); err != nil {
+			cleanup()
+			return nil, err
+		}
+	}
 	for _, art := range v.Artifacts {
-		if err := in.fetchArtifact(ctx, art, tmp); err != nil {
+		if err := in.fetchArtifact(ctx, art, unpackDest); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("%s@%s: %w", name, ver, err)
 		}
 		if art.Rename != "" {
-			if err := applyRename(tmp, art.Rename); err != nil {
+			if err := applyRename(unpackDest, art.Rename); err != nil {
 				cleanup()
 				return nil, fmt.Errorf("%s@%s: %w", name, ver, err)
 			}
 		}
 	}
 	if len(v.Install) > 0 {
-		if err := runInstall(v.Install, tmp, in.logf); err != nil {
+		// {root} expands to the VERSION ROOT (tmp); cwd is the unpack dir.
+		if err := runInstall(v.Install, tmp, unpackDest, in.logf); err != nil {
 			cleanup()
 			return nil, fmt.Errorf("%s@%s install: %w", name, ver, err)
 		}
@@ -198,8 +210,43 @@ func (in *Installer) installVersion(ctx context.Context, name, ver string, v Ver
 	if err := os.WriteFile(filepath.Join(dir, markerName), []byte("ok\n"), 0o644); err != nil {
 		return nil, err
 	}
+	// Runtime env (e.g. ruby's LD_LIBRARY_PATH): merge into the worker's own
+	// process env so subsequent jobs (which inherit it) see it. Re-applied on
+	// every install, so it survives an already-installed (marker) fast path too.
+	applyEnv(dir, v.Env)
 	in.logf("toolchains: installed %s@%s -> %s", name, ver, dir)
-	return binDirs(dir, v), nil
+	bins := binDirs(dir, v)
+	ensureExecutable(bins)
+	return bins, nil
+}
+
+// ensureExecutable chmods 0755 the regular files directly inside each bin dir.
+// Some upstream tarballs ship their launcher without the exec bit (e.g.
+// App::cpanminus' `cpanm`); making bin entries runnable is the installer's job.
+func ensureExecutable(dirs []string) {
+	for _, d := range dirs {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Type().IsRegular() {
+				_ = os.Chmod(filepath.Join(d, e.Name()), 0o755)
+			}
+		}
+	}
+}
+
+// applyEnv sets each NAME=VALUE in the process env, expanding {root}. It is
+// called on both the fresh-install and already-installed paths (so a restarted
+// worker that finds the marker still exports the env).
+func applyEnv(root string, env map[string]string) {
+	for name, val := range env {
+		if name == "" {
+			continue
+		}
+		_ = os.Setenv(name, expandRoot(val, root))
+	}
 }
 
 // fetchArtifact downloads one file, verifies its sha256, and unpacks it into
@@ -328,6 +375,9 @@ func singleTarget(dest string, art Artifact) (string, error) {
 
 // binDirs computes the PATH dirs for an installed version.
 func binDirs(root string, v Version) []string {
+	// `bin` is always relative to the VERSION ROOT (install[] writes there;
+	// unpack_dir is only the scratch location for the archive + install cwd).
+	base := root
 	var out []string
 	add := func(p string) {
 		if p != "" {
@@ -335,47 +385,47 @@ func binDirs(root string, v Version) []string {
 		}
 	}
 	if len(v.Artifacts) == 0 {
-		return []string{root}
+		return []string{base}
 	}
 	for _, a := range v.Artifacts {
-		rel := expandRoot(a.Bin, root)
+		rel := expandRoot(a.Bin, base)
 		switch normalizeFormat(a.Format) {
 		case "gz", "phar", "raw":
 			p := rel
 			if p == "" {
-				p = filepath.Join(root, fileStem(a.URL))
+				p = filepath.Join(base, fileStem(a.URL))
 			} else if !filepath.IsAbs(p) {
-				p = filepath.Join(root, p)
+				p = filepath.Join(base, p)
 			}
 			add(filepath.Dir(p))
 		default:
 			if rel == "" {
-				add(root)
+				add(base)
 			} else if filepath.IsAbs(rel) {
 				add(filepath.Clean(rel))
 			} else {
-				add(filepath.Join(root, rel))
+				add(filepath.Join(base, rel))
 			}
 		}
 	}
 	return out
 }
 
-func runInstall(argv []string, dir string, logf func(string, ...any)) error {
+func runInstall(argv []string, root, cwd string, logf func(string, ...any)) error {
 	if len(argv) == 0 {
 		return nil
 	}
 	args := make([]string, len(argv))
 	for i, a := range argv {
-		args[i] = expandRoot(a, dir)
+		args[i] = expandRoot(a, root)
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = dir
+	cmd.Dir = cwd
 	// Installer output goes to stderr: the worker prints its one-time
 	// enrollment code to stdout, which must stay clean.
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
-	logf("toolchains: run %v (cwd %s)", args, dir)
+	logf("toolchains: run %v (cwd %s)", args, cwd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%v: %w", args, err)
 	}

@@ -98,6 +98,31 @@ artifacts_json() {
   printf '[%s]' "$out"
 }
 
+# json_argv <space-separated> -> ["a","b"] (empty -> "[]").
+json_argv() {
+  local s="$1"
+  [ -n "$s" ] || { printf '[]'; return; }
+  printf '[%s]' "$(printf '%s' "$s" | awk '{for(i=1;i<=NF;i++){printf "%s\"%s\"",(i>1?",":""),$i}}')"
+}
+
+# json_env <semicolon-separated NAME=VALUE> -> {"NAME":"VALUE",...}
+json_env() {
+  local s="$1" out="" first=1 kv
+  [ -n "$s" ] || { printf '{}'; return; }
+  local IFS=';'
+  for kv in $s; do
+    unset IFS
+    [ -n "$kv" ] || { IFS=';'; continue; }
+    local name="${kv%%=*}" val="${kv#*=}"
+    [ "$first" -eq 1 ] || out+=","
+    first=0
+    out+="$(json_str "$name"):$(json_str "$val")"
+    IFS=';'
+  done
+  unset IFS
+  printf '{%s}' "$out"
+}
+
 # json_array <comma-separated> -> ["a","b"]
 json_array() {
   local s="$1"
@@ -106,7 +131,7 @@ json_array() {
 }
 
 emit() {
-  local lang="$1" ver kind req arts
+  local lang="$1" ver kind req arts inst env ud extra=""
   ver="$(toolchain_version "$lang")"
   kind="$(toolchain_kind "$lang")"
   req="$(toolchain_requires "$lang")"
@@ -114,8 +139,14 @@ emit() {
   # missing; under `set -e` a failing assignment aborts the whole generation
   # rather than emitting a partial/invalid index.
   arts="$(artifacts_json "$lang" "$ver" "$kind")"
-  printf '    %s: {"requires": %s, "versions": {"%s": {"artifacts": %s}}}\n' \
-    "$(json_str "$lang")" "$(json_array "$req")" "$ver" "$arts"
+  inst="$(toolchain_install "$lang")"
+  env="$(toolchain_env "$lang")"
+  ud="$(toolchain_unpack_dir "$lang")"
+  [ -n "$inst" ] && extra+=", \"install\": $(json_argv "$inst")"
+  [ -n "$env" ] && extra+=", \"env\": $(json_env "$env")"
+  [ -n "$ud" ] && extra+=", \"unpack_dir\": $(json_str "$ud")"
+  printf '    %s: {"requires": %s, "versions": {"%s": {"artifacts": %s%s}}}\n' \
+    "$(json_str "$lang")" "$(json_array "$req")" "$ver" "$arts" "$extra"
 }
 
 # specs_ok <lang>: known to the shared metadata (has a version).

@@ -18,19 +18,29 @@
 #       bin     relative to the version root ("{root}" allowed)
 #       rename  "src->dst" (both relative to the version root, applied after
 #               strip), e.g. dart: "dart-sdk->dart"
+#   toolchain_install <lang>   space-separated argv run after unpacking
+#                              ("{root}" expands to the version dir), e.g.
+#                              rust: "./install.sh --prefix={root} …". Empty = none.
+#   toolchain_env <lang>       semicolon-separated NAME=VALUE runtime env
+#                              ("{root}" expands), e.g. ruby's LD_LIBRARY_PATH.
+#   toolchain_unpack_dir <lang> subdir under the version root to unpack into and
+#                              run install[] from (default "" = the root itself).
+#                              Needed when the installer refuses its own dir
+#                              (rust/clojure install.sh).
 #
-# strip/bin/rename mirror each Dockerfile.<lang>'s unpack (validate against it
-# before trusting a new entry).
+# strip/bin/rename/install/env/unpack_dir mirror each Dockerfile.<lang>'s unpack
+# (validate against it before trusting a new entry).
 
 # ---- published (installable) set --------------------------------------------
-# Phase 1 = "download -> verify -> unpack -> PATH", no install.sh, no compile:
-#   go node python java25 dotnet php dart kotlin zig bun pixi
-# (ruby is held back: its tarball needs LD_LIBRARY_PATH, i.e. env injection —
-# see the phase-2 note in the MR/DEVELOP.)
-# Phase 2 adds the build kinds (rust/elixir/clojure/r/lua) and the remaining
-# pure-unpack langs (swift/julia/crystal/gleam/groovy/scala/sbt/cmake/ninja/
-# godot/uv/cpanm/perl/deno/ocaml/haskell/conda/ruby).
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi}"
+# Phase 1 = "download -> verify -> unpack -> PATH", no install.sh, no compile.
+# Phase 2 = the rest, still "download -> verify -> unpack (+ optional install
+# step / runtime env)". Deferred to phase 2b (not published): lua + r (compile
+# from source), elixir + gleam (multi-part OTP build + hex), clang
+# (apt.llvm.org + conan wheels), java + swift (very large images), conda (its
+# installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
+# based), godot (needs the OS fontconfig package), perl (cpanm's `#!perl`
+# shebang needs the Dockerfile's make-install) — not pure unpack.
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
@@ -53,6 +63,7 @@ toolchain_version() {
 toolchain_requires() {
   case "$1" in
     kotlin|groovy|clojure|scala) echo "java25" ;;
+    gleam) echo "elixir" ;;
     *) echo "" ;;
   esac
 }
@@ -60,7 +71,10 @@ toolchain_requires() {
 # ---- publish kind -----------------------------------------------------------
 toolchain_kind() {
   case "$1" in
-    rust|elixir|lua|r|clojure) echo "build" ;;
+    # Only source compiles need a publisher-side build (phase 2b); everything
+    # else is as-is: unpack (+ optional `install[]` step, e.g. rust/elixir/
+    # clojure/conda) and/or a runtime `env[]` (ruby).
+    lua|r) echo "build" ;;
     *) echo "as-is" ;;
   esac
 }
@@ -81,25 +95,61 @@ toolchain_specs() {
     zig)     echo "ZIG_URL|tar.xz|1|." ;;                    # zig at root
     bun)     echo "BUN_URL|zip|1|." ;;                       # bun at root
     pixi)    echo "PIXI_URL|raw|0|bin/pixi" ;;
-    # ---- phase 2 (pure unpack, not yet published) ----
+    # ---- phase 2 (pure unpack: as-is, + optional install[]/env[]) ----
     java)    echo "JDK_URL|tar.gz|1|bin;GRADLE_URL|zip|1|bin" ;;
     scala)   echo "SCALA_CLI_URL|gz|0|bin/scala-cli;SBT_URL|tar.gz|1|bin" ;;
     groovy)  echo "GROOVY_URL|zip|1|bin" ;;
     gleam)   echo "GLEAM_URL|tar.gz|1|." ;;
-    ruby)    echo "RUBY_URL|tar.gz|0|bin" ;;                 # NOTE: also needs LD_LIBRARY_PATH
+    ruby)    echo "RUBY_URL|tar.gz|0|x64/bin" ;;             # ruby-builder layout: x64/{bin,lib}; + env
     swift)   echo "SWIFT_URL|tar.gz|1|usr/bin" ;;
-    deno)    echo "DENO_URL|raw|0|bin/deno" ;;
+    deno)    echo "DENO_URL|zip|0|." ;;                     # zip root holds `deno`
     julia)   echo "JULIA_URL|tar.gz|1|bin" ;;
     crystal) echo "CRYSTAL_URL|tar.gz|1|bin" ;;
     ocaml)   echo "OPAM_URL|raw|0|bin/opam" ;;
     haskell) echo "GHCUP_URL|raw|0|bin/ghcup" ;;
     perl)    echo "CPANM_URL|tar.gz|1|bin" ;;
+    godot)   echo "GODOT_URL|zip|0|bin|Godot_v4.7.2-stable_linux.x86_64->bin/godot" ;;
+    # rust/elixir/clojure/conda are as-is too, but need an install[] step (below).
+    rust)    echo "RUST_URL|tar.gz|1|bin" ;;                 # install.sh --prefix={root} populates bin/
+    elixir)  echo "OTP_URL|tar.gz|1|bin;ELIXIR_URL|zip|1|bin;HEX_URL|zip|1|lib/elixir/lib/hex/hex.ez;HEXKEY_URL|raw|0|lib/elixir/lib/hex/hex-registry-public-key.pem" ;;
+    clojure) echo "CLOJURE_URL|tar.gz|1|bin" ;;
     conda)   echo "CONDA_URL|raw|0|bin/miniconda.sh" ;;
-    godot)   echo "GODOT_URL|zip|1|bin/godot" ;;
-    clang)   echo "CMAKE_URL|tar.gz|1|bin;NINJA_URL|zip|1|bin" ;;
-    # build kinds: publisher ships ONE relocatable tarball, strip 0 + bin "bin".
-    rust|elixir|lua|r|clojure) echo "" ;;
+    # phase 2b (source compile): publisher ships ONE relocatable tarball.
+    lua|r)   echo "" ;;
     *) return 1 ;;
+  esac
+}
+
+# ---- post-unpack install step (as-is kinds) ---------------------------------
+# Space-separated argv; {root} expands to the version dir. Runs with cwd=root.
+toolchain_install() {
+  case "$1" in
+    rust)    echo "./install.sh --prefix={root} --without=rust-docs --disable-ldconfig" ;;
+    elixir)  echo "./Install -minimal {root}" ;;
+    clojure) echo "./install.sh {root}" ;;  # phase 2b: upstream install.sh is sed/ruby-based
+    conda)   echo "bash {root}/bin/miniconda.sh -b -p {root}" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---- runtime env (as-is kinds) ----------------------------------------------
+# Semicolon-separated NAME=VALUE; {root} expands. Applied to the worker env
+# (jobs inherit it) after a successful install.
+toolchain_env() {
+  case "$1" in
+    ruby) echo "LD_LIBRARY_PATH={root}/x64/lib" ;;
+    # crystal derives its worker pool from the host CPU inventory, which
+    # overflows inside a container on a very large node (see Dockerfile.crystal).
+    crystal) echo "CRYSTAL_WORKERS=4" ;;
+    *) echo "" ;;
+  esac
+}
+
+# ---- unpack subdir (install.sh refuses its own directory) -------------------
+toolchain_unpack_dir() {
+  case "$1" in
+    rust|clojure) echo "dist" ;;
+    *) echo "" ;;
   esac
 }
 

@@ -268,3 +268,125 @@ func TestGreatestVersion(t *testing.T) {
 		t.Fatalf("got %q err %v", got, err)
 	}
 }
+
+// TestEnsureEnv: a version's `env` is exported (with {root} expanded) after a
+// successful install — ruby's LD_LIBRARY_PATH.
+func TestEnsureEnv(t *testing.T) {
+	blob := tarGz(t, "ruby", map[string]string{"bin/ruby": "#!/bin/sh\n"})
+	idxURL, _ := serveIndex(t, map[string][]byte{"ruby.tgz": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"ruby": map[string]any{"versions": map[string]any{
+				"4.0.7": map[string]any{
+					"artifacts": []any{map[string]any{
+						"url": base + "/blobs/ruby.tgz", "sha256": sha(blob), "format": "tar.gz", "strip": 1, "bin": "bin"}},
+					"env": map[string]string{"TEST_LD_LIBRARY_PATH": "{root}/lib"},
+				},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	t.Setenv("TEST_LD_LIBRARY_PATH", "")
+	if _, err := in.Ensure(context.Background(), []Spec{{Name: "ruby", Version: "4.0.7"}}); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "ruby", "4.0.7", "lib")
+	if got := os.Getenv("TEST_LD_LIBRARY_PATH"); got != want {
+		t.Fatalf("env = %q, want %q", got, want)
+	}
+}
+
+// TestEnsureInstallStepArgv: `install` argv runs with {root} expanded and cwd
+// at the version dir.
+func TestEnsureInstallStepArgv(t *testing.T) {
+	blob := tarGz(t, "clj", map[string]string{"install.sh": "#!/bin/sh\nmkdir -p \"$1/bin\"; touch \"$1/bin/clojure\"\n"})
+	idxURL, _ := serveIndex(t, map[string][]byte{"clj.tgz": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"clojure": map[string]any{"versions": map[string]any{
+				"1.12.6": map[string]any{
+					"artifacts": []any{map[string]any{
+						"url": base + "/blobs/clj.tgz", "sha256": sha(blob), "format": "tar.gz", "strip": 1, "bin": "bin"}},
+					"install": []string{"/bin/sh", "./install.sh", "{root}"},
+				},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	if _, err := in.Ensure(context.Background(), []Spec{{Name: "clojure", Version: "1.12.6"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "clojure", "1.12.6", "bin", "clojure")); err != nil {
+		t.Fatalf("install step did not populate bin: %v", err)
+	}
+}
+
+// TestEnsureUnpackDir: `unpack_dir` unpacks the archive into a subdir, runs
+// install[] there with cwd=subdir, expands {root} to the VERSION ROOT, and
+// resolves `bin` against the version root (rust's install.sh shape).
+func TestEnsureUnpackDir(t *testing.T) {
+	// install.sh asserts it is NOT run from its own directory, then writes to
+	// the prefix it is given.
+	blob := tarGz(t, "rust", map[string]string{
+		"install.sh": "#!/bin/sh\np=\"${1#--prefix=}\"\n[ \"$PWD\" != \"$p\" ] || { echo same-dir >&2; exit 1; }\nmkdir -p \"$p/bin\"; touch \"$p/bin/rustc\"\n",
+	})
+	idxURL, _ := serveIndex(t, map[string][]byte{"rust.tgz": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"rust": map[string]any{"versions": map[string]any{
+				"1.98.1": map[string]any{
+					"artifacts": []any{map[string]any{
+						"url": base + "/blobs/rust.tgz", "sha256": sha(blob), "format": "tar.gz", "strip": 1, "bin": "bin"}},
+					"install":    []string{"/bin/sh", "./install.sh", "--prefix={root}"},
+					"unpack_dir": "dist",
+				},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	bins, err := in.Ensure(context.Background(), []Spec{{Name: "rust", Version: "1.98.1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// bin resolves against the VERSION ROOT (install[] wrote there), not dist/.
+	want := filepath.Join(root, "rust", "1.98.1", "bin")
+	if len(bins) != 1 || bins[0] != want {
+		t.Fatalf("bins=%v want [%s]", bins, want)
+	}
+	if _, err := os.Stat(filepath.Join(want, "rustc")); err != nil {
+		t.Fatalf("install did not populate bin at version root: %v", err)
+	}
+}
+
+// TestEnsureExecutableBit: a bin file shipped non-executable is made runnable.
+func TestEnsureExecutableBit(t *testing.T) {
+	blob := tarGz(t, "perl", map[string]string{"bin/cpanm": "#!/bin/sh\necho hi\n"})
+	idxURL, _ := serveIndex(t, map[string][]byte{"perl.tgz": blob}, func(base string) string {
+		doc := map[string]any{"schema": 1, "toolchains": map[string]any{
+			"perl": map[string]any{"versions": map[string]any{
+				"1.7049": map[string]any{"artifacts": []any{map[string]any{
+					"url": base + "/blobs/perl.tgz", "sha256": sha(blob), "format": "tar.gz", "strip": 1, "bin": "bin"}}},
+			}},
+		}}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	})
+	root := t.TempDir()
+	in := New(root, idxURL, http.DefaultClient, nil)
+	if _, err := in.Ensure(context.Background(), []Spec{{Name: "perl", Version: "1.7049"}}); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(filepath.Join(root, "perl", "1.7049", "bin", "cpanm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&0o111 == 0 {
+		t.Fatalf("cpanm not executable: %v", fi.Mode())
+	}
+}
