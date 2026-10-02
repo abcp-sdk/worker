@@ -45,7 +45,7 @@
 # (apt.llvm.org + conan wheels), java + swift (very large images), conda (its
 # installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
 # based), perl (cpanm's `#!perl` shebang needs the Dockerfile's make-install).
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot erlang elixir conda clojure perl}"
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot erlang elixir conda clojure perl lua r}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
