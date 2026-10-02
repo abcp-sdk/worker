@@ -259,6 +259,14 @@ cd agent-toolchain
 ARTIFACT_TOKEN=<token> ./publish-artifacts.sh        # upload + publish index
 ```
 
+**Layout gotcha**: artifact's generic store addresses content as
+`/artifacts/generic/<name>/<version>/<filename>` — EXACTLY three segments (see
+`easy-vcs/artifact` `generic/lib.go`). A nested
+`toolchains/<lang>/<version>/<file>` is four segments and **404s**. The published
+layout is therefore **flat**: toolchain `<lang>@<ver>` → name `toolchains-<lang>`,
+version `<ver>`, filename `<file>`; the index → name `toolchains`, version
+`index`, filename `index.json`.
+
 Phase 1 = pure-unpack only: `go node python java25 dotnet php dart kotlin zig
 bun pixi`. Phase 2 adds the build kinds (`rust elixir lua r clojure`) and the
 remaining pure-unpack langs. GPU/pip chains and VM/desktop images stay images

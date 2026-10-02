@@ -59,12 +59,15 @@ set -a
 set +a
 
 put() { # local-file remote-relative-path
-  local file="$1" rel="$2"
-  local url="${ARTIFACT%/}/artifacts/generic/toolchains/${rel}"
+  local file="$1" name="$2" ver="$3" fname="$4"
+  # Flat generic shape: /artifacts/generic/<name>/<version>/<filename> (EXACTLY
+  # 3 segments; nested toolchains/<lang>/<version>/<file> 404s — see
+  # easy-vcs/artifact generic/lib.go). So name = toolchains-<lang>.
+  local url="${ARTIFACT%/}/artifacts/generic/${name}/${ver}/${fname}"
   if [ "$DRY" -eq 1 ]; then echo "  [dry-run] PUT ${url} <- ${file}"; return 0; fi
   curl -fsS -X PUT -H "Authorization: Bearer ${ARTIFACT_TOKEN}" \
     --data-binary @"${file}" "${url}" >/dev/null
-  echo "  PUT ${rel}"
+  echo "  PUT ${name}/${ver}/${fname}"
 }
 
 require_token() {
@@ -86,7 +89,7 @@ publish_as_is() { # lang
       echo "  WARN ${lang}: missing cache artifact ${file} — run ./fetch-artifacts.sh ${lang} (index build will fail without it)" >&2
       IFS=';'; continue
     fi
-    put "$path" "${lang}/${ver}/${file}"
+    put "$path" "toolchains-${lang}" "$ver" "$file"
     IFS=';'
   done
   unset IFS
@@ -192,7 +195,7 @@ publish_build() { # lang
       echo "  staged ${tarball} ($(wc -c <"$tarball") bytes)"
     fi
   fi
-  put "$tarball" "${lang}/${ver}/toolchain.tar.gz"
+  put "$tarball" "toolchains-${lang}" "$ver" "toolchain.tar.gz"
 }
 
 # ---- main --------------------------------------------------------------------
