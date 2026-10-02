@@ -210,6 +210,37 @@ them through artifact instead, point the tools at the artifact mounts (npm
   (`sandbox-macos-xcode`, `sandbox-windows-devtools`, `sandbox-desktop-labwc`,
   `sandbox-android-gms`).
 
+## On-demand toolchains (`internal/toolchains`)
+
+Instead of one image per language, a sandbox can declare toolchains at runtime
+and the worker installs them into `$WORKER_TOOLCHAIN_ROOT` (default
+`/opt/toolchains`):
+
+- `WORKSPACE_TOOLCHAINS="go=1.27.1,node=26.9.0"` (env), and/or a `.toolchains`
+  file in the workspace root (same `name=version` lines, `#` comments allowed);
+- `agent-worker toolchain-install go=1.27.1,node=26.9.0` (the CLI half);
+- an implicit ensure before every `Execute` (a failure FAILS the job loudly —
+  never a silent fallback to the bare base image).
+
+The index is fetched from `$WORKER_TOOLCHAIN_INDEX` (default: the artifact
+generic mount). **The installer hard-codes no mirror and the image hard-codes no
+index address** — the index's `url` fields are data. The schema (artifacts[],
+sha256-required, format, strip/bin, install[], requires[]) is the contract in
+`abc-protocol/deploy/DEVELOP.md` → "Toolchain index".
+
+`agent-toolchain/build-index.sh` GENERATES the index from the same
+`toolchain/<distro>/urls.env` (+ `urls.local.env`) the image builds use, taking
+sha256 from `cache/<distro>/` (run `fetch-artifacts.sh` first). `--publish`
+PUTs it to the artifact mount with `ARTIFACT_TOKEN`. It is deliberately NOT a
+runtime-mirror: it is build-time data generation, consistent with the
+"runtime mirrors are not baked in" rule above.
+
+Install semantics: idempotent + atomic (`.tmp` → sha256 verify → `rename`, with
+an `.installed` marker), `flock` on the root for concurrent ensures, and a
+two-layer PATH (`$ROOT/<lang>/<ver>/bin` merged into the runner's job env AND
+the worker's own process env). `requires[]` (e.g. kotlin → java25) is pulled in
+automatically.
+
 ## Known gotcha: `fetch-artifacts.sh` provenance
 
 `agent-toolchain/` was moved here from `workspace-gateway` (commit `91e6cc4`);

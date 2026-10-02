@@ -29,7 +29,7 @@ func newServer(t *testing.T) (*httptest.Server, *auth.Gate) {
 	}
 	jobs := jobsvc.NewManager(runner, store, 100, 100)
 	files := filesvc.New(ws)
-	svc := internal.NewService(jobs, files, runner)
+	svc := internal.NewService(jobs, files, runner, nil)
 	gate, err := auth.New(auth.Options{BootID: "boot-1"})
 	if err != nil {
 		t.Fatal(err)

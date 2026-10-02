@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/abcp-sdk/agent-worker/internal/filesvc"
 	"github.com/abcp-sdk/agent-worker/internal/jobsvc"
 	"github.com/abcp-sdk/agent-worker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/toolchains"
 )
 
 // jobWaitMax caps JobWait. Configurable via WORKER_WAIT_MAX (go duration or
@@ -31,16 +33,17 @@ func waitMaxFromEnv() time.Duration {
 
 // WorkerService implements workerv1connect.WorkerServiceHandler.
 type WorkerService struct {
-	jobs   *jobsvc.Manager
-	files  *filesvc.Service
-	shell  *shellh.Runner
-	bootID string
+	jobs       *jobsvc.Manager
+	files      *filesvc.Service
+	shell      *shellh.Runner
+	toolchains *toolchains.Installer
+	bootID     string
 }
 
-func NewService(jobs *jobsvc.Manager, files *filesvc.Service, shell *shellh.Runner) *WorkerService {
+func NewService(jobs *jobsvc.Manager, files *filesvc.Service, shell *shellh.Runner, tc *toolchains.Installer) *WorkerService {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
-	return &WorkerService{jobs: jobs, files: files, shell: shell, bootID: hex.EncodeToString(b[:])}
+	return &WorkerService{jobs: jobs, files: files, shell: shell, toolchains: tc, bootID: hex.EncodeToString(b[:])}
 }
 
 func (s *WorkerService) Info(ctx context.Context, req *connect.Request[workerv1.InfoRequest]) (*connect.Response[workerv1.InfoResponse], error) {
@@ -61,11 +64,50 @@ func (s *WorkerService) Execute(ctx context.Context, req *connect.Request[worker
 	if req.Msg.Command == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("command required"))
 	}
+	// On-demand toolchains: install whatever the workspace declared BEFORE the
+	// job runs. A failure fails the job loudly — never a silent fallback to the
+	// bare base image (see abc-protocol/deploy/DEVELOP.md "Toolchain index").
+	if err := s.ensureToolchains(ctx); err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("toolchains: %w", err))
+	}
 	id, err := s.jobs.Execute(ctx, req.Msg.Command, req.Msg.Workdir, req.Msg.Env, req.Msg.TimeoutMs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&workerv1.ExecuteResponse{JobId: id}), nil
+}
+
+// ensureToolchains installs the toolchains declared by WORKSPACE_TOOLCHAINS
+// and/or the workspace's `.toolchains` file, then makes their bin dirs visible
+// to subsequent jobs (two layers: the runner's job env AND the worker's own
+// process env, so anything the worker spawns sees them too). No-op when nothing
+// is declared or no installer is configured.
+func (s *WorkerService) ensureToolchains(ctx context.Context) error {
+	if s.toolchains == nil {
+		return nil
+	}
+	specs, err := toolchains.SpecsFromEnv(os.Getenv("WORKSPACE_TOOLCHAINS"), s.shell.Workspace)
+	if err != nil {
+		return err
+	}
+	if len(specs) == 0 {
+		return nil
+	}
+	bins, err := s.toolchains.Ensure(ctx, specs)
+	if err != nil {
+		return err
+	}
+	if len(bins) > 0 {
+		s.shell.AddPaths(bins...)
+		prependProcessPath(bins)
+	}
+	return nil
+}
+
+// prependProcessPath merges dirs into the worker's OWN PATH (dedup), so a
+// spawned process — not just a job — resolves the new toolchain.
+func prependProcessPath(dirs []string) {
+	_ = os.Setenv("PATH", toolchains.MergePath(os.Getenv("PATH"), dirs))
 }
 
 func (s *WorkerService) ListJobs(ctx context.Context, req *connect.Request[workerv1.ListJobsRequest]) (*connect.Response[workerv1.ListJobsResponse], error) {

@@ -1,0 +1,108 @@
+// Package toolchains implements the on-demand language toolchain installer:
+// it reads the published index (see abc-protocol/deploy/DEVELOP.md "Toolchain
+// index"), downloads + verifies + unpacks each declared toolchain into
+// $WORKER_TOOLCHAIN_ROOT, and returns the bin dirs to add to PATH.
+//
+// Nothing here hard-codes a mirror: the index URL is an env knob
+// (WORKER_TOOLCHAIN_INDEX) whose default points at the in-cluster artifact
+// service but is always overridable. The index's `url` fields are DATA.
+package toolchains
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+)
+
+// Index is the published toolchain index (schema 1).
+type Index struct {
+	Schema     int                  `json:"schema"`
+	Toolchains map[string]Toolchain `json:"toolchains"`
+}
+
+// Toolchain is one language: its versions and the other toolchains it needs.
+type Toolchain struct {
+	Requires []string           `json:"requires"`
+	Versions map[string]Version `json:"versions"`
+}
+
+// Version is one pinned toolchain version.
+type Version struct {
+	Artifacts []Artifact `json:"artifacts"`
+	Install   []string   `json:"install"`
+}
+
+// Artifact is one downloadable file of a version.
+type Artifact struct {
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256"`
+	Format string `json:"format"`
+	Strip  int    `json:"strip"`
+	Bin    string `json:"bin"`
+}
+
+// ParseIndex decodes and validates an index. Validation is strict: a missing
+// sha256 or an unknown format is rejected up front (never a half install).
+func ParseIndex(b []byte) (*Index, error) {
+	var idx Index
+	if err := json.Unmarshal(b, &idx); err != nil {
+		return nil, fmt.Errorf("parse index: %w", err)
+	}
+	if idx.Schema != 1 {
+		return nil, fmt.Errorf("unsupported index schema %d (want 1)", idx.Schema)
+	}
+	for name, tc := range idx.Toolchains {
+		if len(tc.Versions) == 0 {
+			return nil, fmt.Errorf("toolchain %q has no versions", name)
+		}
+		for ver, v := range tc.Versions {
+			if len(v.Artifacts) == 0 {
+				return nil, fmt.Errorf("%s@%s has no artifacts", name, ver)
+			}
+			for _, a := range v.Artifacts {
+				switch {
+				case a.URL == "":
+					return nil, fmt.Errorf("%s@%s: artifact without url", name, ver)
+				case a.SHA256 == "":
+					return nil, fmt.Errorf("%s@%s: artifact %s without sha256", name, ver, a.URL)
+				case normalizeFormat(a.Format) == "":
+					return nil, fmt.Errorf("%s@%s: artifact %s has unknown format %q", name, ver, a.URL, a.Format)
+				}
+			}
+		}
+	}
+	return &idx, nil
+}
+
+// LoadIndex fetches and parses an index from an http(s) URL, or from a local
+// path when src has no scheme (handy for tests and offline runs).
+func LoadIndex(ctx context.Context, client *http.Client, src string) (*Index, error) {
+	var b []byte
+	var err error
+	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+		if rerr != nil {
+			return nil, rerr
+		}
+		resp, derr := client.Do(req)
+		if derr != nil {
+			return nil, derr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("GET %s: %s", src, resp.Status)
+		}
+		if b, err = io.ReadAll(resp.Body); err != nil {
+			return nil, err
+		}
+	} else {
+		if b, err = os.ReadFile(src); err != nil {
+			return nil, err
+		}
+	}
+	return ParseIndex(b)
+}

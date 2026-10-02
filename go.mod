@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	connectrpc.com/connect v1.20.0
+	github.com/ulikunitz/xz v0.5.16
 	golang.org/x/sys v0.47.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.58.0

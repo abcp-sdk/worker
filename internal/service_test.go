@@ -24,7 +24,7 @@ func newTestServer(t *testing.T) (client workerv1connect.WorkerServiceClient, cl
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := NewService(jobsvc.NewManager(runner, store, 1000, 200), filesvc.New(ws), runner)
+	svc := NewService(jobsvc.NewManager(runner, store, 1000, 200), filesvc.New(ws), runner, nil)
 
 	mux := http.NewServeMux()
 	mux.Handle(workerv1connect.NewWorkerServiceHandler(svc))

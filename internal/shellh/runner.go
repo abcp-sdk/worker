@@ -33,6 +33,9 @@ type Runner struct {
 
 	mu     sync.Mutex
 	childs map[int]*exec.Cmd
+
+	// envMu guards Env: AddPaths may extend it while jobs read it.
+	envMu sync.RWMutex
 }
 
 func New(workspace string, env []string) *Runner {
@@ -48,13 +51,66 @@ func New(workspace string, env []string) *Runner {
 // concurrent jobs are safe.
 func (r *Runner) RunWithEnv(ctx context.Context, command, workdir string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (Result, error) {
 	if len(env) == 0 {
-		return r.run(ctx, command, workdir, r.Env, stdin, stdout, stderr)
+		return r.run(ctx, command, workdir, r.env(), stdin, stdout, stderr)
 	}
-	merged := append([]string{}, r.Env...)
+	merged := append([]string{}, r.env()...)
 	for k, v := range env {
 		merged = append(merged, k+"="+v)
 	}
 	return r.run(ctx, command, workdir, merged, stdin, stdout, stderr)
+}
+
+// env returns the base environment under the lock, so a concurrent AddPaths
+// (toolchain install) is observed atomically by the next job.
+func (r *Runner) env() []string {
+	r.envMu.RLock()
+	defer r.envMu.RUnlock()
+	return r.Env
+}
+
+// AddPaths prepends directories to the base PATH of future jobs (idempotent,
+// no duplicates). It backs the on-demand toolchain installer: a newly installed
+// toolchain becomes visible to subsequent jobs with no restart. Existing jobs
+// are unaffected (they captured their env when they started).
+func (r *Runner) AddPaths(dirs ...string) {
+	if len(dirs) == 0 {
+		return
+	}
+	r.envMu.Lock()
+	defer r.envMu.Unlock()
+
+	cur, idx := "", -1
+	for i, kv := range r.Env {
+		if strings.HasPrefix(kv, "PATH=") {
+			cur, idx = kv[len("PATH="):], i
+			break
+		}
+	}
+	var parts []string
+	if cur != "" {
+		parts = strings.Split(cur, string(os.PathListSeparator))
+	}
+	have := map[string]bool{}
+	for _, p := range parts {
+		have[p] = true
+	}
+	var prepend []string
+	for _, d := range dirs {
+		if d == "" || have[d] {
+			continue
+		}
+		have[d] = true
+		prepend = append(prepend, d)
+	}
+	if len(prepend) == 0 {
+		return
+	}
+	newPath := strings.Join(append(prepend, parts...), string(os.PathListSeparator))
+	if idx >= 0 {
+		r.Env[idx] = "PATH=" + newPath
+	} else {
+		r.Env = append(r.Env, "PATH="+newPath)
+	}
 }
 
 // Result is the outcome of one interpreted command run.
