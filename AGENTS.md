@@ -275,12 +275,26 @@ pixi`. **Phase 2** = the rest, still "download → verify → unpack (+ optional
 `install[]` (+`unpack_dir`), `env[]`, and `requires` (kotlin/clojure/scala →
 java25).
 
-**Phase 2b** (deferred; NOT published): `lua r` (source compile), `elixir gleam`
-(multi-part OTP build + hex), `clang` (apt.llvm.org + conan), `java swift`
-(very large images), `conda` (installer refuses a non-empty prefix), `clojure`
-(install.sh is sed/ruby-based), `godot` (needs OS fontconfig), `perl` (cpanm's
-`#!perl` shebang needs the Dockerfile's make-install). GPU/pip chains and
-VM/desktop images stay images (never runtime-installed).
+**Phase 2b** = installers / build-time packaging, now PUBLISHED too:
+`java swift gleam godot erlang elixir clojure conda perl lua r`. Shapes used:
+`install[]` (`erlang` OTP `./Install`, `clojure`, `perl`), `unpack_dir`
+(rust/clojure/perl), `install_prefix` (conda — INSTALLER-STYLE, installs in
+place), build-time relocatable archives (`lua`, `r` — `publish-artifacts.sh
+--build`). `install[]` is a SHELL command (`["sh","-c",cmd]`); do NOT bake
+`{root}` absolute paths into it (it runs in `.tmp`, later renamed — use
+`$(dirname "$0")/…`). GPU/pip chains and VM/desktop images stay images (never
+runtime-installed).
+
+**`clang` stays an IMAGE** (not runtime-installed): `Dockerfile.clang` is
+deliberately built `from` the raw distro WITHOUT gcc, and that property does not
+hold on a shared base (which carries build-essential). Keep it a toolchain
+image; do not add it to `PUBLISHED_LANGS`.
+
+**`sandbox-submit-mr` diffs the FILE SYSTEM, not git** (it does not honor
+`.gitignore`): after building/publishing, `agent-toolchain/cache/` and
+`agent-toolchain/.publish/` hold multi-GB artifacts and can make a submit time
+out (or hang). Always `rm -rf agent-toolchain/cache agent-toolchain/.publish`
+before submitting.
 
 ### Platform-aware index (`os`/`arch`) + the VM toolchain bridge
 
