@@ -23,6 +23,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=config.sh
 . "${HERE}/config.sh"
+# Shared metadata: some toolchains (e.g. flutter) are index/publisher-only (no
+# Dockerfile.<lang>), so `wanted` also consults toolchain_specs below.
+# shellcheck source=toolchain-meta.sh
+. "${HERE}/toolchain-meta.sh"
 
 LANGS="${*:-}"
 DIR="${HERE}/toolchain/${DISTRO}"
@@ -39,6 +43,7 @@ URL_VARS="NODE_URL GO_URL PYTHON_URL PYTHON313_URL UV_URL RUST_URL JDK_URL JDK25
 DOTNET_URL RUBY_URL PHP_URL COMPOSER_URL OTP_URL ELIXIR_URL HEX_URL HEXKEY_URL \
 DART_URL SWIFT_URL CONDA_URL PIXI_URL CONAN_URL \
 BUN_URL DENO_URL GLEAM_URL KOTLIN_URL GROOVY_URL CLOJURE_URL SCALA_CLI_URL SBT_URL \
+FLUTTER_LINUX_URL FLUTTER_WINDOWS_URL FLUTTER_MACOS_URL FLUTTER_MACOS_ARM64_URL \
 JULIA_URL CRYSTAL_URL OPAM_URL GHCUP_URL ZIG_URL CPANM_URL LUA_URL LUAROCKS_URL \
 R_URL CMAKE_URL NINJA_URL GODOT_URL"
 
@@ -70,6 +75,19 @@ wanted() {
     [ "$l" = "base" ] && continue
     [ -f "${DIR}/Dockerfile.${dfproto}" ] || continue
     if grep -q "COPY cache/$1\b" "${DIR}/Dockerfile.${dfproto}" 2>/dev/null; then return 0; fi
+  done
+  # Index/publisher-only toolchains (no Dockerfile): match against their
+  # toolchain_specs cache filenames instead.
+  local spec var
+  for l in $LANGS; do
+    local IFS=';'
+    for spec in $(toolchain_specs "$l" 2>/dev/null); do
+      unset IFS
+      var="${spec%%|*}"
+      [ "$(toolchain_cache_name "$var")" = "$1" ] && return 0
+      IFS=';'
+    done
+    unset IFS
   done
   return 1
 }
