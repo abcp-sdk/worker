@@ -25,6 +25,7 @@ config.sh                 shared knobs (registry/namespace/distro/cache) + build
 build-toolchain.sh        build one language image (or `base`, or all)
 build-all.sh              build base + every WORKSPACE_LANGS entry, one at a time
 build-one.sh              detached single-image build with a log file
+build-index.sh            generate/publish the on-demand toolchain index (schema 1)
 mirror-images.sh          mirror pinned middleware images (middleware.env)
 middleware.Dockerfile     no-op FROM re-serve used by mirror-images.sh
 middleware.env            pinned shared middleware image refs
@@ -104,6 +105,25 @@ nats) that every tenant sees via `list-oci-images`. Bump a version there, then:
 ./mirror-images.sh            # mirror every entry
 ./mirror-images.sh postgres   # just one
 ```
+
+## On-demand toolchain index
+
+`build-index.sh` generates the toolchain index the worker's on-demand installer
+consumes (schema + consumer contract: `abc-protocol/deploy/DEVELOP.md` →
+"Toolchain index"; implementation: `internal/toolchains`). It reads the same
+`toolchain/<distro>/urls.env` the image builds use and takes each sha256 from
+`cache/<distro>/`, so the index can never drift from the pinned artifacts:
+
+```sh
+./fetch-artifacts.sh          # populate cache/<distro>/ (sha256 source)
+./build-index.sh              # print index.json to stdout
+./build-index.sh -o index.json
+ARTIFACT_TOKEN=<token> ./build-index.sh --publish   # PUT to the artifact mount
+```
+
+The per-language unpack metadata (format/strip/bin/requires/install) is derived
+from each language's Dockerfile install logic — keep it in sync when a
+Dockerfile's unpack changes.
 
 ## Notes
 

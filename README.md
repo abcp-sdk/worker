@@ -162,6 +162,22 @@ Env: `WORKER_PORT` (default 8080; cluster sandboxes pin 48080),
 `WORKER_WORKSPACE` (default `~/EasyLab/workspace`, sandboxes use `/workspace`),
 `WORKER_DB` (default `agent-worker.db`).
 
+## On-demand toolchains
+
+A sandbox need not ship a language: declare it and the worker installs it into
+`/opt/toolchains` before the job runs.
+
+```
+WORKSPACE_TOOLCHAINS=go=1.27.1,node=26.9.0     # env, or a /workspace/.toolchains file
+agent-worker toolchain-install go=1.27.1       # the same installer as a CLI
+```
+
+Versions come from a published index (`WORKER_TOOLCHAIN_INDEX`; default the
+in-cluster `artifact` generic mount), verified by sha256, unpacked atomically,
+and added to PATH for subsequent jobs. A failed ensure fails the job — it never
+silently falls back to the bare base image. See `AGENTS.md` and
+`abc-protocol/deploy/DEVELOP.md` ("Toolchain index") for the schema.
+
 ## Auth / exclusive enrollment
 
 The worker is **fail-closed**: it executes nothing until it holds a bearer

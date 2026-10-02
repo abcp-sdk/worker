@@ -31,10 +31,18 @@ import (
 	"github.com/abcp-sdk/agent-worker/internal/jobsvc"
 	"github.com/abcp-sdk/agent-worker/internal/novnc"
 	"github.com/abcp-sdk/agent-worker/internal/shellh"
+	"github.com/abcp-sdk/agent-worker/internal/toolchains"
 	"github.com/abcp-sdk/agent-worker/internal/webui"
 )
 
 func main() {
+	// Subcommand: `toolchain-install <name=version,...>` — the CLI half of the
+	// on-demand toolchain installer. Detected before flag parsing so the worker's
+	// own flags stay untouched.
+	if len(os.Args) > 1 && os.Args[1] == "toolchain-install" {
+		os.Exit(runToolchainInstall(os.Args[2:]))
+	}
+
 	addr := flag.String("addr", "", "listen address (default 0.0.0.0:${WORKER_PORT:-8080})")
 	workspace := flag.String("workspace", "", "workspace root (default ${WORKER_WORKSPACE} or ~/workspace)")
 	dbPath := flag.String("db", "", "job history sqlite path (default ${WORKER_DB} or ./agent-worker.db)")
@@ -65,6 +73,12 @@ func main() {
 
 	// Job env: inherit the worker's own environment (the sandbox image is the
 	// source of truth for toolchain variables); the token is already gone.
+	// Pre-existing on-demand toolchains are re-added to PATH first, so a
+	// restarted worker keeps seeing them without reinstalling.
+	tc := toolchains.New(os.Getenv("WORKER_TOOLCHAIN_ROOT"), os.Getenv("WORKER_TOOLCHAIN_INDEX"), nil, log.Printf)
+	if bins := toolchains.ExistingBinDirs(tc.Root()); len(bins) > 0 {
+		_ = os.Setenv("PATH", toolchains.MergePath(os.Getenv("PATH"), bins))
+	}
 	env := jobEnv()
 
 	runner := shellh.New(ws, env)
@@ -74,7 +88,7 @@ func main() {
 	}
 	jobs := jobsvc.NewManager(runner, store, 10000, 1000)
 	files := filesvc.New(ws)
-	svc := internal.NewService(jobs, files, runner)
+	svc := internal.NewService(jobs, files, runner, tc)
 
 	// Fail-closed auth gate: a token must be supplied at boot (managed
 	// sandbox) or claimed once from a startup-minted one-time code (external
