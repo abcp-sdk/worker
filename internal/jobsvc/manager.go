@@ -40,7 +40,12 @@ type Job struct {
 
 	subMu sync.Mutex
 	subs  []chan string
-	done  chan struct{}
+	// finished is set (under subMu) by finishSubs before the output channels are
+	// closed. Subscribe checks it under the same lock, so a subscriber can never
+	// register into the window between "subs closed" and "done closed" and get a
+	// channel nobody will ever close (which would hang a WatchJob range).
+	finished bool
+	done     chan struct{}
 
 	seq    atomic.Int64
 	stdinW io.WriteCloser
@@ -520,6 +525,7 @@ func (j *Job) publishLine(line string) {
 func (j *Job) finishSubs() {
 	j.subMu.Lock()
 	defer j.subMu.Unlock()
+	j.finished = true
 	for _, ch := range j.subs {
 		close(ch)
 	}
