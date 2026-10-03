@@ -266,13 +266,20 @@ func ensureExecutable(dirs []string) {
 
 // applyEnv sets each NAME=VALUE in the process env, expanding {root}. It is
 // called on both the fresh-install and already-installed paths (so a restarted
-// worker that finds the marker still exports the env).
+// worker that finds the marker still exports the env). PATH-style variables
+// (LD_LIBRARY_PATH) are MERGED, not replaced, so two toolchains contributing to
+// the same variable (ruby + clang) do not clobber each other.
 func applyEnv(root string, env map[string]string) {
 	for name, val := range env {
 		if name == "" {
 			continue
 		}
-		_ = os.Setenv(name, expandRoot(val, root))
+		val = expandRoot(val, root)
+		if name == "LD_LIBRARY_PATH" {
+			_ = os.Setenv(name, MergePath(os.Getenv(name), []string{val}))
+			continue
+		}
+		_ = os.Setenv(name, val)
 	}
 }
 
