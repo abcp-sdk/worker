@@ -285,10 +285,12 @@ place), build-time relocatable archives (`lua`, `r` — `publish-artifacts.sh
 `$(dirname "$0")/…`). GPU/pip chains and VM/desktop images stay images (never
 runtime-installed).
 
-**`clang` stays an IMAGE** (not runtime-installed): `Dockerfile.clang` is
-deliberately built `from` the raw distro WITHOUT gcc, and that property does not
-hold on a shared base (which carries build-essential). Keep it a toolchain
-image; do not add it to `PUBLISHED_LANGS`.
+**`clang` / `cmake` / `ninja` are installable too** (not images): clang uses the
+official relocatable LLVM prebuilt (`LLVM-<ver>-Linux-X64.tar.xz` → `bin`),
+cmake/ninja their official prebuilts. The old `Dockerfile.clang` was
+deliberately gcc-free; the installable clang does not try to reproduce that —
+it lands on the shared base (which has build-essential). This is a deliberate
+semantic change (owner decision).
 
 **`sandbox-submit-mr` diffs the FILE SYSTEM, not git** (it does not honor
 `.gitignore`): after building/publishing, `agent-toolchain/cache/` and
