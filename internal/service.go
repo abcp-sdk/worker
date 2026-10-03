@@ -161,13 +161,20 @@ func (s *WorkerService) WatchJob(ctx context.Context, req *connect.Request[worke
 			return err
 		}
 	}
-	if live != nil {
-		for line := range live {
+	// Drain live output until the channel closes. Select on ctx.Done too, so a
+	// client disconnect (or a channel that never closes) can never park this
+	// handler forever.
+	for live != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case line, ok := <-live:
+			if !ok {
+				live = nil
+				break
+			}
 			if err := stream.Send(&workerv1.WatchJobResponse{Event: &workerv1.WatchJobResponse_Output{Output: line}}); err != nil {
 				return err
-			}
-			if ctx.Err() != nil {
-				return ctx.Err()
 			}
 		}
 	}

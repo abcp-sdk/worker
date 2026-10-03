@@ -271,3 +271,39 @@ func TestOutputLinesSQLPagination(t *testing.T) {
 		t.Fatalf("replay tail = %v", tail)
 	}
 }
+
+// TestSubscribeAfterFinishNeverHangs locks the finish/Subscribe race: once a
+// job's subscribers are closed, Subscribe must return a nil live channel — even
+// in the window before the job's done channel is closed. Before the fix,
+// Subscribe registered into an already-drained list and returned a channel
+// nobody would ever close, hanging a WatchJob range forever.
+func TestSubscribeAfterFinishNeverHangs(t *testing.T) {
+	m, _ := newTestManager(t)
+	id, err := m.Execute(context.Background(), "echo done", "", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := m.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-job.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("job did not finish")
+	}
+	for i := 0; i < 200; i++ {
+		replay, live := job.Subscribe()
+		if live != nil {
+			select {
+			case _, ok := <-live:
+				if ok {
+					t.Fatalf("iter %d: live channel delivered a line after finish", i)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatalf("iter %d: live channel never closed (would hang WatchJob)", i)
+			}
+		}
+		_ = replay
+	}
+}

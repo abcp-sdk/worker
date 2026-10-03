@@ -45,7 +45,7 @@
 # (apt.llvm.org + conan wheels), java + swift (very large images), conda (its
 # installer refuses a non-empty prefix), clojure (its install.sh is sed/ruby
 # based), perl (cpanm's `#!perl` shebang needs the Dockerfile's make-install).
-PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot erlang elixir conda clojure perl lua r}"
+PUBLISHED_LANGS="${PUBLISHED_LANGS:-go node python java25 dotnet php dart kotlin zig bun pixi scala groovy deno julia crystal ocaml haskell ruby rust flutter java swift gleam godot erlang elixir conda clojure perl lua r clang cmake ninja}"
 
 # ---- versions (the index key; kept explicit — upstream naming varies) --------
 toolchain_version() {
@@ -61,8 +61,9 @@ toolchain_version() {
     crystal) echo "1.21.0" ;; ocaml) echo "2.6.0" ;; haskell) echo "0.2.6.2" ;;
     lua) echo "5.5.1" ;; perl) echo "1.7049" ;; r) echo "4.6.1" ;;
     flutter) echo "3.47.6" ;;
+    clang) echo "23.1.2" ;; cmake) echo "4.4.3" ;; ninja) echo "1.13.2" ;;
     conda) echo "latest" ;; pixi) echo "latest" ;; godot) echo "4.7.2" ;;
-    clang) echo "4.4.3" ;; *) echo "unknown" ;;
+    *) echo "unknown" ;;
   esac
 }
 
@@ -117,6 +118,10 @@ toolchain_specs() {
     ocaml)   echo "OPAM_URL|raw|0|bin/opam" ;;
     haskell) echo "GHCUP_URL|raw|0|bin/ghcup" ;;
     perl)    echo "CPANM_URL|tar.gz|1|bin" ;;
+    # clang/LLVM official prebuilt: tar.xz, root LLVM-<ver>-Linux-X64/ -> strip1 -> bin/.
+    clang)   echo "LLVM_URL|tar.xz|1|bin" ;;
+    cmake)   echo "CMAKE_URL|tar.gz|1|bin" ;;
+    ninja)   echo "NINJA_URL|zip|0|." ;;                     # zip root holds `ninja` (single file)
     # godot ships one executable in the zip ROOT (strip 0); the zip has no exec
     # bit, so install[] chmods it. `bin "."` puts the version root on PATH.
     godot)   echo "GODOT_URL|zip|0|." ;;
@@ -156,6 +161,7 @@ toolchain_install() {
     # installs into the fresh ./miniconda (install_prefix).
     conda)   echo "bash bin/miniconda.sh -b -p miniconda" ;;
     godot)   echo "chmod 755 {root}/Godot_v4.7.2-stable_linux.x86_64" ;;
+    ninja)   echo "chmod 755 {root}/ninja" ;;                # zip has no exec bit
     *) echo "" ;;
   esac
 }
