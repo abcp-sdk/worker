@@ -177,6 +177,13 @@ toolchain_env() {
     # crystal derives its worker pool from the host CPU inventory, which
     # overflows inside a container on a very large node (see Dockerfile.crystal).
     crystal) echo "CRYSTAL_WORKERS=4" ;;
+    # clang bundles libc++ (libc++.so.1) but the binaries carry no rpath, so a
+    # libc++-linked program needs the bundled lib dir on the loader path.
+    clang) echo "LD_LIBRARY_PATH={root}/lib/x86_64-unknown-linux-gnu" ;;
+    # JDK: JAVA_HOME (Dockerfile.java sets it); the `java`/`javac` bin is on PATH.
+    java) echo "JAVA_HOME={root}" ;;
+    # .NET SDK: DOTNET_ROOT (Dockerfile.dotnet sets it).
+    dotnet) echo "DOTNET_ROOT={root}" ;;
     *) echo "" ;;
   esac
 }

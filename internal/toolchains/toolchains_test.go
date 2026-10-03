@@ -279,7 +279,7 @@ func TestEnsureEnv(t *testing.T) {
 				"4.0.7": map[string]any{
 					"artifacts": []any{map[string]any{
 						"url": base + "/blobs/ruby.tgz", "sha256": sha(blob), "format": "tar.gz", "strip": 1, "bin": "bin"}},
-					"env": map[string]string{"TEST_LD_LIBRARY_PATH": "{root}/lib"},
+					"env": map[string]string{"LD_LIBRARY_PATH": "{root}/lib"},
 				},
 			}},
 		}}
@@ -288,13 +288,19 @@ func TestEnsureEnv(t *testing.T) {
 	})
 	root := t.TempDir()
 	in := New(root, idxURL, http.DefaultClient, nil)
-	t.Setenv("TEST_LD_LIBRARY_PATH", "")
+	t.Setenv("LD_LIBRARY_PATH", "")
 	if _, err := in.Ensure(context.Background(), []Spec{{Name: "ruby", Version: "4.0.7"}}); err != nil {
 		t.Fatal(err)
 	}
 	want := filepath.Join(root, "ruby", "4.0.7", "lib")
-	if got := os.Getenv("TEST_LD_LIBRARY_PATH"); got != want {
+	if got := os.Getenv("LD_LIBRARY_PATH"); got != want {
 		t.Fatalf("env = %q, want %q", got, want)
+	}
+	// Merged, not replaced: a second contributor is prepended.
+	other := filepath.Join(root, "clang", "lib")
+	applyEnv(root, map[string]string{"LD_LIBRARY_PATH": other})
+	if got := os.Getenv("LD_LIBRARY_PATH"); got != other+string(os.PathListSeparator)+want {
+		t.Fatalf("merged LD_LIBRARY_PATH = %q", got)
 	}
 }
 
